@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 
+from .description import DESCRIPTION_MIMES, GDOC_MIME, PRIORITY, TXT_MIME, docx_to_text, norm_stem
+
 log = logging.getLogger(__name__)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -25,6 +27,7 @@ class DriveFile:
     modified_time: str
     parents: list[str]
     folder_name: str = ""  # 하위 폴더 이름 (최상위 폴더면 빈 값)
+    description_file: dict | None = None  # 같은 이름의 설명 파일 {id, name, mimeType, parents}
 
     @property
     def modified_dt(self) -> datetime:
@@ -63,8 +66,14 @@ class Drive:
         exclude = exclude_folder_ids or set()
         folders: list[tuple[str, str]] = [(folder_id, "")]
         videos: list[DriveFile] = []
+        mime_q = " or ".join(f"mimeType = '{m}'" for m in DESCRIPTION_MIMES)
         while folders:
             fid, fname = folders.pop(0)
+            docs: dict[str, dict] = {}
+            for d in self._list_children(fid, mime_q):
+                key = norm_stem(d["name"], d["mimeType"])
+                if key not in docs or PRIORITY[d["mimeType"]] < PRIORITY[docs[key]["mimeType"]]:
+                    docs[key] = d
             for f in self._list_children(fid, "mimeType contains 'video/'"):
                 videos.append(
                     DriveFile(
@@ -76,6 +85,7 @@ class Drive:
                         modified_time=f.get("modifiedTime", ""),
                         parents=f.get("parents", []),
                         folder_name=fname,
+                        description_file=docs.get(norm_stem(f["name"])),
                     )
                 )
             if include_subfolders:
@@ -107,11 +117,23 @@ class Drive:
                         log.info("  다운로드 %d%%", pct)
                         last = pct
 
-    def move(self, f: DriveFile, target_folder_id: str) -> None:
+    def read_text(self, doc: dict) -> str:
+        """설명 파일 내용을 텍스트로 읽는다."""
+        if doc["mimeType"] == GDOC_MIME:
+            data = self.svc.files().export(fileId=doc["id"], mimeType="text/plain").execute()
+            return data.decode("utf-8-sig") if isinstance(data, bytes) else str(data)
+        data = self.svc.files().get_media(fileId=doc["id"], supportsAllDrives=True).execute()
+        if doc["mimeType"] == TXT_MIME:
+            return data.decode("utf-8-sig", errors="replace")
+        return docx_to_text(data)
+
+    def move(self, f: DriveFile | dict, target_folder_id: str) -> None:
+        file_id = f.id if isinstance(f, DriveFile) else f["id"]
+        parents = f.parents if isinstance(f, DriveFile) else f.get("parents", [])
         self.svc.files().update(
-            fileId=f.id,
+            fileId=file_id,
             addParents=target_folder_id,
-            removeParents=",".join(f.parents),
+            removeParents=",".join(parents),
             supportsAllDrives=True,
             fields="id, parents",
         ).execute()

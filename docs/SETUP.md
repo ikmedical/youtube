@@ -122,7 +122,8 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 |---|---|---|
 | `YT_PRIVACY_STATUS` | `private` | `private` / `unlisted` / `public` |
 | `YT_TITLE_TEMPLATE` | `{stem}` | 사용 가능: `{stem}`(확장자 뺀 파일명) `{name}` `{date}` `{datetime}` `{created_date}` |
-| `YT_DESCRIPTION_TEMPLATE` | (빈 값) | 같은 치환자 사용, 줄바꿈은 `\n` |
+| `YT_DESCRIPTION_TEMPLATE` | `{description}` | 설명 형식. `{description}` = 같은 이름 설명 파일 내용. 그 외 제목과 같은 치환자 사용, 줄바꿈은 `\n` |
+| `REQUIRE_DESCRIPTION_FILE` | `false` | `true` 면 같은 이름의 설명 파일이 올라올 때까지 그 영상은 업로드하지 않고 기다림 |
 | `YT_TAGS` | (빈 값) | 쉼표로 구분 |
 | `YT_PLAYLIST_ID` | (빈 값) | 업로드한 영상을 넣을 기본 재생목록 ID 또는 URL |
 | `YT_PLAYLIST_MAP` | (빈 값) | 하위 폴더별 재생목록. `폴더이름=재생목록ID` 를 `;` 또는 줄바꿈으로 구분 (예: `강의=PLaaa;쇼츠=PLbbb`). `INCLUDE_SUBFOLDERS=true` 필요 |
@@ -135,6 +136,25 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `INCLUDE_SUBFOLDERS` | `false` | 하위 폴더까지 찾을지 |
 | `TIMEZONE` | `Asia/Seoul` | 시트·제목의 시간대 |
 | `SHEET_TAB` | `uploads` | 시트 탭 이름 |
+
+### 설명(Description) 파일
+
+영상과 **같은 폴더에 같은 이름**으로 설명 파일을 두면 그 내용이 YouTube 설명이 됩니다.
+
+```
+공유 드라이브 폴더/
+  ├─ 1강 소개.mp4
+  └─ 1강 소개.docx   ← 이 파일의 글이 설명으로 들어감
+```
+
+- 지원 형식: **Word(.docx)**, **Google 문서**, **.txt** (같은 이름이 여러 개면 docx → Google 문서 → txt 순)
+- 이름 비교는 확장자·대소문자·앞뒤 공백을 무시합니다.
+- 글자만 가져옵니다(굵게, 링크 서식, 이미지는 빠짐). URL 을 글로 적어 두면 YouTube 에서 자동으로 링크가 됩니다.
+- YouTube 제한: 최대 5,000 바이트(한글 약 1,600자). 넘으면 잘리고, `<` `>` 는 지워집니다.
+- **설명 파일이 없으면**: 기본값은 `YT_DESCRIPTION_TEMPLATE` 기준(기본: 빈 설명)으로 그대로 올리고 Chat 에 "설명 파일 없음"을 알려 줍니다. 영상보다 문서를 늦게 올리는 경우가 있다면 `REQUIRE_DESCRIPTION_FILE=true` 로 설정해 문서가 생길 때까지 기다리게 하세요.
+- 공통 문구를 붙이려면 예: `YT_DESCRIPTION_TEMPLATE` = `{description}\n\n구독과 좋아요 부탁드립니다!`
+- `AFTER_UPLOAD=move` 이면 설명 파일도 영상과 함께 완료 폴더로 옮깁니다.
+- 시트 `description_file` 칸에 어떤 파일을 썼는지 기록됩니다.
 
 ### 재생목록 지정
 

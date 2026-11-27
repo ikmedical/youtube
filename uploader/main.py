@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from .chat import Chat
 from .config import Config
+from .description import clean
 from .drive import Drive, DriveFile
 from .google_auth import drive_credentials, youtube_credentials
 from .sheet import Row, Sheet, decide
@@ -27,7 +28,7 @@ class _SafeDict(dict):
         return "{" + key + "}"
 
 
-def render(template: str, f: DriveFile, tz: ZoneInfo) -> str:
+def render(template: str, f: DriveFile, tz: ZoneInfo, description: str = "") -> str:
     stem, _ = os.path.splitext(f.name)
     created = f.created_time and datetime.fromisoformat(f.created_time.replace("Z", "+00:00")).astimezone(tz)
     now = datetime.now(tz)
@@ -37,8 +38,11 @@ def render(template: str, f: DriveFile, tz: ZoneInfo) -> str:
         date=now.strftime("%Y-%m-%d"),
         datetime=now.strftime("%Y-%m-%d %H:%M"),
         created_date=created.strftime("%Y-%m-%d") if created else "",
+        description="{description}",
     )
-    return template.replace("\\n", "\n").format_map(values)
+    out = template.replace("\\n", "\n").format_map(values)
+    # 설명 파일 내용은 마지막에 넣어 내용 속 { } 가 치환되지 않게 한다
+    return out.replace("{description}", description).strip()
 
 
 def run_url() -> str:
@@ -87,6 +91,9 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             if row is not None and row.status == "uploading":
                 log.warning("건너뜀 %s: %s", v.name, reason)
             continue
+        if cfg.require_description_file and not v.description_file:
+            log.info("건너뜀 %s: 같은 이름의 설명 파일(.docx 등)이 아직 없음", v.name)
+            continue
         if not Drive.is_stable(v, cfg.min_file_age_minutes):
             log.info("건너뜀 %s: 최근 %d분 내 수정됨(업로드 중일 수 있음)", v.name, cfg.min_file_age_minutes)
             continue
@@ -107,11 +114,21 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             row = sheet.new_row()
             row.set("drive_file_id", v.id)
         title = render(cfg.title_template, v, tz)
-        description = render(cfg.description_template, v, tz)
+        desc_text = ""
+        desc_note = ""
+        if v.description_file:
+            try:
+                desc_text = clean(drive.read_text(v.description_file))
+                desc_note = v.description_file["name"]
+            except Exception as e:  # noqa: BLE001
+                log.warning("설명 파일 읽기 실패 %s: %s", v.description_file["name"], e)
+                desc_note = f"읽기 실패: {v.description_file['name']} ({str(e)[:100]})"
+        description = render(cfg.description_template, v, tz, desc_text)
         row.set("file_name", v.name)
         row.set("size_mb", f"{v.size / 1024 / 1024:.1f}")
         row.set("drive_created", v.created_time)
         row.set("title", title)
+        row.set("description_file", desc_note or "(없음)")
         row.set("status", "uploading")
         row.set("attempts", row.attempts + 1)
         row.set("started_at", now_str(tz))
@@ -152,9 +169,15 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             if cfg.after_upload == "move" and cfg.done_folder_id:
                 try:
                     drive.move(v, cfg.done_folder_id)
+                    if v.description_file:
+                        drive.move(v.description_file, cfg.done_folder_id)
                     notes += "\n(완료 폴더로 이동함)"
                 except Exception as e:  # noqa: BLE001
                     notes += f"\n⚠️ 완료 폴더 이동 실패: {e}"
+            if not v.description_file:
+                notes += "\nℹ️ 같은 이름의 설명 파일이 없어 기본 설명으로 올렸습니다."
+            elif not desc_text:
+                notes += f"\n⚠️ 설명 파일을 읽지 못했거나 비어 있습니다: {desc_note}"
             chat.send(f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{notes}")
         except QuotaExceeded as e:
             row.set("status", "queued")

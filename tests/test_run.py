@@ -54,6 +54,9 @@ class FakeDrive:
     def move(self, *a):
         pass
 
+    def read_text(self, doc):
+        return "  설명 본문\r\n\r\n\r\n둘째 줄  "
+
 
 class FakeYT:
     behaviour = {}
@@ -145,3 +148,31 @@ def test_playlist(monkeypatch):
     assert FakeYT.added == [("YT_v1", "PLdefault"), ("YT_v2", "PLlecture")]
     assert {v[0]: v[HEADERS.index("playlist_id")] for v in FakeSheet.store.values()} == {
         "f1": "PLdefault", "f2": "PLlecture"}
+
+
+def test_description_file(monkeypatch):
+    setup(monkeypatch)
+    FakeYT.behaviour = {}
+    got = {}
+    orig = FakeYT.upload
+
+    def spy(self, path, mime, title, description, *a):
+        got[title] = description
+        return orig(self, path, mime, title, description, *a)
+
+    monkeypatch.setattr(FakeYT, "upload", spy)
+    files = [vid(1), vid(2), vid(3)]
+    files[0].description_file = {"id": "d1", "name": "v1.docx", "mimeType": "x", "parents": ["p"]}
+    monkeypatch.setattr(FakeDrive, "files", files)
+
+    # 설명 파일이 없으면 기다리는 옵션: v1 만 업로드
+    c = cfg(monkeypatch, REQUIRE_DESCRIPTION_FILE="true")
+    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    assert got == {"v1": "설명 본문\n\n둘째 줄"}
+    assert len(FakeSheet.store) == 1
+
+    # 기본값: 없으면 기본 설명(빈 값)으로 업로드
+    c = cfg(monkeypatch, REQUIRE_DESCRIPTION_FILE="false")
+    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    assert got["v2"] == "" and got["v3"] == ""
+    assert any("설명 파일이 없어" in t for t in FakeChat.msgs)

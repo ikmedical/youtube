@@ -58,6 +58,7 @@ jobs:
           YT_TITLE_TEMPLATE: ${{ vars.YT_TITLE_TEMPLATE }}
           YT_DESCRIPTION_TEMPLATE: ${{ vars.YT_DESCRIPTION_TEMPLATE }}
           YT_TAGS: ${{ vars.YT_TAGS }}
+          REQUIRE_DESCRIPTION_FILE: ${{ vars.REQUIRE_DESCRIPTION_FILE }}
           YT_PLAYLIST_ID: ${{ vars.YT_PLAYLIST_ID }}
           YT_PLAYLIST_MAP: ${{ vars.YT_PLAYLIST_MAP }}
           MAX_UPLOADS_PER_RUN: ${{ inputs.max_uploads || vars.MAX_UPLOADS_PER_RUN }}

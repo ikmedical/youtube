@@ -36,7 +36,12 @@ def safe_title(title: str) -> str:
 
 
 def safe_description(desc: str) -> str:
-    return desc.replace("<", "").replace(">", "")[:5000]
+    # YouTube 설명: 최대 5000 바이트(UTF-8, 한글 1자 = 3바이트), '<' '>' 불가
+    d = desc.replace("<", "").replace(">", "")
+    b = d.encode("utf-8")
+    if len(b) <= 5000:
+        return d
+    return b[:5000].decode("utf-8", errors="ignore")
 
 
 class YouTube:
