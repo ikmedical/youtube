@@ -99,6 +99,25 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 2. 이름 입력(예: `YouTube 업로더`) → 저장 → 생성된 URL 복사 → `GOOGLE_CHAT_WEBHOOK_URL`
    - 웹훅은 Google Workspace 계정에서만 사용할 수 있습니다.
 
+### 6-1. 사람 태그(멘션) — 선택
+
+실패하거나 사람이 조치해야 할 때(업로드 실패, 설명 파일 없음, 설정 오류, 재생목록 추가 실패 등)만 지정한 사람을 태그합니다. 업로드 성공 알림은 태그하지 않습니다.
+
+1. 태그할 사람은 해당 Chat 스페이스의 **멤버**여야 합니다.
+2. GitHub Variables 에 `CHAT_MENTIONS` 를 만들고 쉼표로 구분해 입력
+   - 먼저 이메일로 시도: `hjs@ikmedicare.com, cgh@ikmedicare.com, ksy@ikmedicare.com`
+3. **Actions → "Google Chat 알림 테스트" → Run workflow** 로 테스트 메시지 전송
+4. 이름이 **파란색 태그**로 보이고 알림이 가면 끝. 이메일이 그냥 글자로 보이면 웹훅이 이메일 태그를 지원하지 않는 것이니, 숫자 사용자 ID로 바꿔 주세요.
+
+**숫자 사용자 ID 찾는 법 (PC 크롬)**
+1. https://chat.google.com 에서 해당 스페이스 열기
+2. 그 사람이 쓴 메시지의 **이름** 위에서 마우스 오른쪽 클릭 → **검사**
+3. 개발자 도구에 강조된 줄 근처에서 `user/human/` 뒤의 긴 숫자(약 21자리)를 찾기
+   (예: `data-member-id="user/human/112233445566778899001"` → `112233445566778899001`)
+4. `CHAT_MENTIONS` 에 숫자들을 쉼표로 구분해 저장 (예: `1122...001, 2233...002`)
+
+이메일과 숫자 ID 를 섞어 써도 됩니다. `all` 을 넣으면 스페이스 전체를 태그합니다.
+
 ## 7. GitHub에 저장
 
 저장소 **Settings → Secrets and variables → Actions**
@@ -134,6 +153,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `MIN_FILE_AGE_MINUTES` | `10` | 최근 N분 내 수정된 파일은 아직 올라오는 중으로 보고 다음 실행으로 미룸 |
 | `AFTER_UPLOAD` | `keep` | `keep`(그대로 둠) / `move`(`DONE_FOLDER_ID` 로 이동) |
 | `INCLUDE_SUBFOLDERS` | `false` | 하위 폴더까지 찾을지 |
+| `CHAT_MENTIONS` | (빈 값) | 실패·조치 필요 알림에서 태그할 사람 (6-1 참고) |
 | `TIMEZONE` | `Asia/Seoul` | 시트·제목의 시간대 |
 | `SHEET_TAB` | `uploads` | 시트 탭 이름 |
 

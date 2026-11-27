@@ -46,3 +46,10 @@ def test_is_stable():
     recent = (now - timedelta(minutes=3)).isoformat().replace("+00:00", "Z")
     assert Drive.is_stable(f(), 10, now) is True
     assert Drive.is_stable(f(modified=recent), 10, now) is False
+
+
+def test_parse_mentions():
+    from uploader.chat import parse_mentions
+    assert parse_mentions("123, users/456\na@b.com all") == [
+        "<users/123>", "<users/456>", "<users/a@b.com>", "<users/all>"]
+    assert parse_mentions("") == []

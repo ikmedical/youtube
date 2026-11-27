@@ -15,6 +15,7 @@ Google 공유 드라이브 폴더에 올라온 새 영상을 **YouTube 에 자�
 - 워크플로
   - `.github/workflows/drive-to-youtube.yml` : 매시간 실행 + 수동 실행(dry run 지원)
   - `.github/workflows/setup-sheet.yml` : 관리 시트 최초 생성
+  - `.github/workflows/test-chat.yml` : Google Chat 알림·태그 테스트
 - 코드: `uploader/` (Python)
 - 테스트: `python -m pytest tests`
 

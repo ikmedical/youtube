@@ -32,6 +32,7 @@ jobs:
           DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.DRIVE_SERVICE_ACCOUNT_JSON }}
           DRIVE_REFRESH_TOKEN: ${{ secrets.DRIVE_REFRESH_TOKEN }}
           GOOGLE_CHAT_WEBHOOK_URL: ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          CHAT_MENTIONS: ${{ vars.CHAT_MENTIONS }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID || vars.DRIVE_FOLDER_ID }}
           SHEET_ID: ${{ secrets.SHEET_ID || vars.SHEET_ID }}
           SHEET_TAB: ${{ vars.SHEET_TAB }}

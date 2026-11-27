@@ -81,7 +81,7 @@ class FakeYT:
 class FakeChat:
     msgs = []
 
-    def send(self, t):
+    def send(self, t, mention=False):
         FakeChat.msgs.append(t)
 
 
@@ -202,3 +202,15 @@ def test_description_file(monkeypatch):
             vals[HEADERS.index("next_try_date")] = today.isoformat()
     m._run(c, FakeChat(), tz)
     assert got["v3"] == ""
+
+
+def test_mentions_only_on_failure(monkeypatch):
+    setup(monkeypatch)
+    sent = []
+    monkeypatch.setattr(m.Chat, "send", lambda self, t, mention=False: sent.append((t[:12], mention)), raising=False)
+    from uploader.chat import Chat
+    chat = Chat(None, "123")
+    FakeYT.behaviour = {"v2": "fail"}
+    monkeypatch.setattr(FakeDrive, "files", [vid(1), vid(2)])
+    m._run(cfg(monkeypatch), chat, ZoneInfo("Asia/Seoul"))
+    assert [mention for _, mention in sent] == [False, True]

@@ -63,11 +63,11 @@ def main() -> int:
         cfg.validate_for_run()
         return _run(cfg, chat, tz)
     except SystemExit as e:
-        chat.send(f"❌ *Drive→YouTube 설정 오류*\n{e}\n{run_url()}")
+        chat.send(f"❌ *Drive→YouTube 설정 오류*\n{e}\n{run_url()}", mention=True)
         raise
     except Exception as e:  # noqa: BLE001
         log.error("치명적 오류\n%s", traceback.format_exc())
-        chat.send(f"❌ *Drive→YouTube 실행 실패*\n`{type(e).__name__}: {str(e)[:500]}`\n{run_url()}")
+        chat.send(f"❌ *Drive→YouTube 실행 실패*\n`{type(e).__name__}: {str(e)[:500]}`\n{run_url()}", mention=True)
         return 1
 
 
@@ -121,7 +121,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         chat.send(
             "📝 *설명 파일이 없어 업로드를 보류했습니다*\n"
             f"{names}{more}\n"
-            f"같은 폴더에 같은 이름의 워드 파일을 올려 주세요. {tomorrow} 에 다시 확인합니다."
+            f"같은 폴더에 같은 이름의 워드 파일을 올려 주세요. {tomorrow} 에 다시 확인합니다.",
+            mention=True,
         )
 
     log.info("업로드 대상 %d개 (이번 실행 최대 %d개)", len(todo), cfg.max_uploads_per_run)
@@ -204,7 +205,10 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
                 notes += "\nℹ️ 같은 이름의 설명 파일이 없어 기본 설명으로 올렸습니다."
             elif not desc_text:
                 notes += f"\n⚠️ 설명 파일을 읽지 못했거나 비어 있습니다: {desc_note}"
-            chat.send(f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{notes}")
+            chat.send(
+                f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{notes}",
+                mention="⚠️" in notes,  # 재생목록·이동·설명 읽기 실패 등 확인이 필요할 때만 태그
+            )
         except QuotaExceeded as e:
             row.set("status", "queued")
             row.set("attempts", max(0, row.attempts - 1))  # 할당량 초과는 시도 횟수에서 제외
@@ -229,7 +233,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
                 else "최대 재시도 횟수에 도달해 더 이상 시도하지 않습니다. 시트에서 status 를 failed→queued 로 바꾸면 다시 시도합니다."
             )
             chat.send(
-                f"❌ *YouTube 업로드 실패*\n파일: {v.name}\n`{type(e).__name__}: {str(e)[:300]}`\n{retry_note}\n{run_url()}"
+                f"❌ *YouTube 업로드 실패*\n파일: {v.name}\n`{type(e).__name__}: {str(e)[:300]}`\n{retry_note}\n{run_url()}",
+                mention=True,
             )
         finally:
             try:
