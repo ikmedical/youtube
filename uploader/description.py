@@ -23,6 +23,11 @@ def norm_stem(name: str, mime_type: str = "") -> str:
     return unicodedata.normalize("NFC", stem).strip().casefold()
 
 
+def norm_title(title: str) -> str:
+    """폴더 이름 ↔ 재생목록 제목 비교용 (확장자 처리 없음)."""
+    return " ".join(unicodedata.normalize("NFC", title).split()).casefold()
+
+
 def docx_to_text(data: bytes) -> str:
     """python-docx 없이 word/document.xml 에서 문단 텍스트만 뽑는다."""
     with zipfile.ZipFile(io.BytesIO(data)) as z:

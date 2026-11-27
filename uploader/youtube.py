@@ -7,7 +7,7 @@ import time
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaFileUpload
+from googleapiclient.http import MediaFileUpload, MediaInMemoryUpload
 
 log = logging.getLogger(__name__)
 
@@ -149,3 +149,21 @@ class YouTube:
                 if pa:
                     out.append(pa)
         return out
+
+    def playlists_by_title(self) -> dict[str, str]:
+        """내 채널 재생목록 {정규화된 제목: id}"""
+        from .description import norm_title
+
+        out: dict[str, str] = {}
+        token = None
+        while True:
+            resp = self.svc.playlists().list(part="snippet", mine=True, maxResults=50, pageToken=token).execute()
+            for p in resp.get("items", []):
+                out.setdefault(norm_title(p["snippet"]["title"]), p["id"])
+            token = resp.get("nextPageToken")
+            if not token:
+                return out
+
+    def set_thumbnail(self, video_id: str, data: bytes, mime_type: str) -> None:
+        media = MediaInMemoryUpload(data, mimetype=mime_type, resumable=False)
+        self.svc.thumbnails().set(videoId=video_id, media_body=media).execute()

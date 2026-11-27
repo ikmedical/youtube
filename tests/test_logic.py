@@ -53,3 +53,21 @@ def test_parse_mentions():
     assert parse_mentions("123, users/456\na@b.com all") == [
         "<users/123>", "<users/456>", "<users/a@b.com>", "<users/all>"]
     assert parse_mentions("") == []
+
+
+def test_fit_thumbnail():
+    import io
+    import os as _os
+
+    from PIL import Image
+
+    from uploader.thumbnail import MAX_BYTES, fit_thumbnail
+
+    small = b"x" * 100
+    assert fit_thumbnail(small, "image/png") == (small, "image/png")
+    img = Image.frombytes("RGB", (2400, 1600), _os.urandom(2400 * 1600 * 3))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    assert buf.tell() > MAX_BYTES
+    data, mime = fit_thumbnail(buf.getvalue(), "image/png")
+    assert mime == "image/jpeg" and len(data) <= MAX_BYTES

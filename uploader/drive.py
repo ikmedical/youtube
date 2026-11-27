@@ -14,6 +14,7 @@ from .description import DESCRIPTION_MIMES, GDOC_MIME, PRIORITY, TXT_MIME, docx_
 log = logging.getLogger(__name__)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
+IMAGE_PRIORITY = {"image/jpeg": 0, "image/png": 1}
 FIELDS = "nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, parents, md5Checksum)"
 
 
@@ -28,6 +29,7 @@ class DriveFile:
     parents: list[str]
     folder_name: str = ""  # 하위 폴더 이름 (최상위 폴더면 빈 값)
     description_file: dict | None = None  # 같은 이름의 설명 파일 {id, name, mimeType, parents}
+    thumbnail_file: dict | None = None  # 같은 이름의 이미지 파일 (jpg/png)
 
     @property
     def modified_dt(self) -> datetime:
@@ -91,6 +93,7 @@ class Drive:
         folders: list[tuple[str, str]] = [(folder_id, "")]
         videos: list[DriveFile] = []
         mime_q = " or ".join(f"mimeType = '{m}'" for m in DESCRIPTION_MIMES)
+        img_q = " or ".join(f"mimeType = '{m}'" for m in IMAGE_PRIORITY)
         while folders:
             fid, fname = folders.pop(0)
             docs: dict[str, dict] = {}
@@ -98,6 +101,11 @@ class Drive:
                 key = norm_stem(d["name"], d["mimeType"])
                 if key not in docs or PRIORITY[d["mimeType"]] < PRIORITY[docs[key]["mimeType"]]:
                     docs[key] = d
+            thumbs: dict[str, dict] = {}
+            for t in self._list_children(fid, img_q):
+                key = norm_stem(t["name"])
+                if key not in thumbs or IMAGE_PRIORITY[t["mimeType"]] < IMAGE_PRIORITY[thumbs[key]["mimeType"]]:
+                    thumbs[key] = t
             for f in self._list_children(fid, "mimeType contains 'video/'"):
                 videos.append(
                     DriveFile(
@@ -110,6 +118,7 @@ class Drive:
                         parents=f.get("parents", []),
                         folder_name=fname,
                         description_file=docs.get(norm_stem(f["name"])),
+                        thumbnail_file=thumbs.get(norm_stem(f["name"])),
                     )
                 )
             if include_subfolders:
@@ -140,6 +149,9 @@ class Drive:
                     if pct // 10 != last // 10:
                         log.info("  다운로드 %d%%", pct)
                         last = pct
+
+    def download_bytes(self, file_id: str) -> bytes:
+        return self.svc.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
 
     def read_text(self, doc: dict) -> str:
         """설명 파일 내용을 텍스트로 읽는다."""

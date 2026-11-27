@@ -33,6 +33,7 @@ HEADERS = [
     "description_file",
     "next_try_date",
     "publish_at",
+    "thumbnail_file",
 ]
 COL = {name: i for i, name in enumerate(HEADERS)}
 LAST_COL = chr(ord("A") + len(HEADERS) - 1)  # 'L'

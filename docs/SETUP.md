@@ -147,6 +147,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `REQUIRE_DESCRIPTION_FILE` | `true` | 같은 이름의 설명 파일이 없으면 업로드를 보류하고 Chat 으로 알린 뒤 다음날 다시 확인. `false` 면 설명 없이 바로 업로드 |
 | `YT_TAGS` | (빈 값) | 쉼표로 구분 |
 | `YT_PLAYLIST_ID` | (빈 값) | 업로드한 영상을 넣을 기본 재생목록 ID 또는 URL |
+| `PLAYLIST_FROM_FOLDER` | `true` | 하위 폴더 이름과 **같은 제목의 재생목록**이 채널에 있으면 자동으로 그 재생목록에 추가 |
 | `YT_PLAYLIST_MAP` | (빈 값) | 하위 폴더별 재생목록. `폴더이름=재생목록ID` 를 `;` 또는 줄바꿈으로 구분 (예: `강의=PLaaa;쇼츠=PLbbb`). `INCLUDE_SUBFOLDERS=true` 필요 |
 | `YT_CATEGORY_ID` | `22` | 22=People & Blogs, 27=Education, 28=Science & Technology |
 | `YT_MADE_FOR_KIDS` | `false` | 아동용 여부 |
@@ -197,7 +198,29 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 - 예약 시각은 시트 `publish_at` 칸과 Chat 알림에 표시됩니다. Studio 에서 바꾸면 다음 실행부터 그 날짜를 기준으로 계산합니다(시트 값은 그대로 남으니 필요하면 같이 고쳐 주세요).
 - ⚠️ **API 감사를 받지 않은 Cloud 프로젝트**로 올린 영상은 YouTube 가 비공개로 잠가 두기 때문에 **예약 공개도 실행되지 않습니다.** 감사 통과 전까지는 Studio 에서 직접 공개 예약을 걸어야 합니다. (아래 "알아둘 제약" 참고)
 
+### 썸네일 파일
+
+영상과 같은 폴더에 **같은 이름의 이미지(.jpg / .png)** 를 두면 썸네일로 적용됩니다.
+
+```
+하위 폴더/
+  ├─ 1강 소개.mp4
+  ├─ 1강 소개.docx   ← 설명
+  └─ 1강 소개.jpg    ← 썸네일
+```
+
+- 권장 크기 1280×720 (16:9). YouTube 제한은 2MB 이며, 넘으면 자동으로 줄여서 올립니다.
+- 썸네일 파일이 없으면 YouTube 자동 썸네일을 사용하고, 업로드는 그대로 진행합니다.
+- ⚠️ 맞춤 썸네일은 **채널 인증(전화번호)** 이 되어 있어야 합니다: https://www.youtube.com/verify
+- 적용에 실패하면 업로드는 성공으로 두고, Chat 에 태그와 함께 경고를 보냅니다.
+
 ### 재생목록 지정
+
+재생목록은 아래 순서로 정합니다.
+1. `YT_PLAYLIST_MAP` 에 적힌 폴더 → 재생목록
+2. **하위 폴더 이름과 제목이 같은 재생목록** (채널에 미리 만들어 두기, 공백·대소문자 차이는 무시)
+3. `YT_PLAYLIST_ID` (기본 재생목록)
+4. 셋 다 없으면 재생목록에 넣지 않음
 
 - 재생목록 ID: YouTube 에서 재생목록을 열면 주소가 `...playlist?list=PLxxxx` 입니다. `list=` 뒤가 ID 이고, URL 전체를 넣어도 됩니다.
 - 모든 영상을 한 재생목록에 넣으려면 `YT_PLAYLIST_ID` 만 설정
