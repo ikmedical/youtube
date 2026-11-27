@@ -37,14 +37,33 @@
 
 ## 3. YouTube refresh token 발급 (내 PC에서 1회)
 
-```bash
-git clone https://github.com/ikmedical/youtube && cd youtube
-pip install -r requirements.txt
-python -m uploader.get_refresh_token --client-secret /경로/client_secret.json --for youtube
+토큰 발급은 내 PC(Windows)에서 한 번만 하면 됩니다. git 이나 WSL 은 필요 없습니다.
+
+**3-1. 준비 (처음 한 번)**
+
+1. https://www.python.org/downloads/ 에서 Python 설치. 설치 첫 화면에서 **"Add python.exe to PATH"** 체크
+2. 이 저장소 코드를 ZIP 으로 받기
+   - PR 병합 전: https://github.com/ikmedical/youtube/archive/refs/heads/claude/project-thread-s5q5cc.zip
+   - 병합 후: 저장소 첫 화면 **Code → Download ZIP**
+3. ZIP 을 원하는 곳(예: `C:\youtube`)에 압축 풀기. 2단계에서 받은 `client_secret.json` 도 같은 폴더에 넣어 두면 편합니다.
+4. 압축 푼 폴더(안에 `uploader` 폴더가 보이는 위치)를 탐색기로 열고, 주소창에 `powershell` 입력 후 Enter
+5. PowerShell 에서 한 줄씩 실행
+
+```powershell
+py -m pip install -r requirements.txt
+```
+
+**3-2. YouTube 토큰 발급**
+
+```powershell
+py -m uploader.get_refresh_token --client-secret client_secret.json --for youtube
 ```
 
 브라우저가 열리면 **YouTube 채널 소유 계정**으로 로그인합니다. (브랜드 계정 채널이면 채널 선택 화면에서 해당 채널 선택)
-출력된 `YT_REFRESH_TOKEN` 값을 복사해 둡니다.
+"확인되지 않은 앱" 경고가 나오면 **고급 → (앱 이름)(으)로 이동** → 권한 모두 허용.
+PowerShell 에 출력된 `YT_REFRESH_TOKEN` 값을 복사해 둡니다.
+
+> `py` 가 없다고 나오면 `python` 으로 바꿔서 실행하세요.
 
 ## 4. 드라이브 계정 인증 (둘 중 하나)
 
@@ -59,11 +78,13 @@ python -m uploader.get_refresh_token --client-secret /경로/client_secret.json 
 
 ### ② 드라이브 계정의 OAuth refresh token
 
-```bash
-python -m uploader.get_refresh_token --client-secret /경로/client_secret.json --for drive
+3-1 과 같은 PowerShell 창에서:
+
+```powershell
+py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 ```
 
-브라우저에서 **공유 드라이브에 접근할 수 있는 계정**으로 로그인 → 출력된 `DRIVE_REFRESH_TOKEN` 저장.
+브라우저에서 **공유 드라이브에 접근할 수 있는 계정(회사 계정)**으로 로그인 → 출력된 `DRIVE_REFRESH_TOKEN` 저장.
 (같은 OAuth 클라이언트를 씁니다. 동의 화면이 *외부* + *프로덕션* 이어야 다른 계정도 로그인됩니다.)
 
 ## 5. 폴더 ID 확인
@@ -103,6 +124,8 @@ python -m uploader.get_refresh_token --client-secret /경로/client_secret.json 
 | `YT_TITLE_TEMPLATE` | `{stem}` | 사용 가능: `{stem}`(확장자 뺀 파일명) `{name}` `{date}` `{datetime}` `{created_date}` |
 | `YT_DESCRIPTION_TEMPLATE` | (빈 값) | 같은 치환자 사용, 줄바꿈은 `\n` |
 | `YT_TAGS` | (빈 값) | 쉼표로 구분 |
+| `YT_PLAYLIST_ID` | (빈 값) | 업로드한 영상을 넣을 기본 재생목록 ID 또는 URL |
+| `YT_PLAYLIST_MAP` | (빈 값) | 하위 폴더별 재생목록. `폴더이름=재생목록ID` 를 `;` 또는 줄바꿈으로 구분 (예: `강의=PLaaa;쇼츠=PLbbb`). `INCLUDE_SUBFOLDERS=true` 필요 |
 | `YT_CATEGORY_ID` | `22` | 22=People & Blogs, 27=Education, 28=Science & Technology |
 | `YT_MADE_FOR_KIDS` | `false` | 아동용 여부 |
 | `MAX_UPLOADS_PER_RUN` | `3` | 한 번 실행에 올릴 최대 개수 |
@@ -112,6 +135,14 @@ python -m uploader.get_refresh_token --client-secret /경로/client_secret.json 
 | `INCLUDE_SUBFOLDERS` | `false` | 하위 폴더까지 찾을지 |
 | `TIMEZONE` | `Asia/Seoul` | 시트·제목의 시간대 |
 | `SHEET_TAB` | `uploads` | 시트 탭 이름 |
+
+### 재생목록 지정
+
+- 재생목록 ID: YouTube 에서 재생목록을 열면 주소가 `...playlist?list=PLxxxx` 입니다. `list=` 뒤가 ID 이고, URL 전체를 넣어도 됩니다.
+- 모든 영상을 한 재생목록에 넣으려면 `YT_PLAYLIST_ID` 만 설정
+- 드라이브 하위 폴더마다 다른 재생목록에 넣으려면 `INCLUDE_SUBFOLDERS=true` + `YT_PLAYLIST_MAP` 설정. 매핑에 없는 폴더(와 최상위 폴더)의 영상은 `YT_PLAYLIST_ID` 로 갑니다.
+- 재생목록은 YouTube 채널 계정이 소유한 것이어야 합니다. 추가 1건당 할당량 50 units 가 더 듭니다.
+- 재생목록 추가가 실패해도 업로드는 성공으로 기록되고, 시트 `error` 칸과 Chat 에 경고가 남습니다.
 
 ## 8. 관리 시트 만들기
 

@@ -24,6 +24,7 @@ class DriveFile:
     created_time: str
     modified_time: str
     parents: list[str]
+    folder_name: str = ""  # 하위 폴더 이름 (최상위 폴더면 빈 값)
 
     @property
     def modified_dt(self) -> datetime:
@@ -60,10 +61,10 @@ class Drive:
     def list_videos(self, folder_id: str, include_subfolders: bool = False,
                     exclude_folder_ids: set[str] | None = None) -> list[DriveFile]:
         exclude = exclude_folder_ids or set()
-        folders = [folder_id]
+        folders: list[tuple[str, str]] = [(folder_id, "")]
         videos: list[DriveFile] = []
         while folders:
-            fid = folders.pop(0)
+            fid, fname = folders.pop(0)
             for f in self._list_children(fid, "mimeType contains 'video/'"):
                 videos.append(
                     DriveFile(
@@ -74,12 +75,13 @@ class Drive:
                         created_time=f.get("createdTime", ""),
                         modified_time=f.get("modifiedTime", ""),
                         parents=f.get("parents", []),
+                        folder_name=fname,
                     )
                 )
             if include_subfolders:
                 for sub in self._list_children(fid, f"mimeType = '{FOLDER_MIME}'"):
                     if sub["id"] not in exclude:
-                        folders.append(sub["id"])
+                        folders.append((sub["id"], sub["name"]))
         videos.sort(key=lambda v: v.created_time)
         return videos
 

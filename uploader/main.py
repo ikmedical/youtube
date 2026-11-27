@@ -136,14 +136,26 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             sheet.save(row)
             uploaded += 1
             log.info("✔ 완료 %s → %s", v.name, url)
-            moved = ""
+            notes = ""
+            playlist_id = cfg.playlist_map.get(v.folder_name) or cfg.playlist_id
+            if playlist_id:
+                try:
+                    yt.add_to_playlist(video_id, playlist_id)
+                    row.set("playlist_id", playlist_id)
+                    sheet.save(row)
+                    notes += "\n재생목록에 추가함"
+                except Exception as e:  # noqa: BLE001
+                    log.warning("재생목록 추가 실패 %s: %s", playlist_id, e)
+                    row.set("error", f"재생목록 추가 실패({playlist_id}): {str(e)[:300]}")
+                    sheet.save(row)
+                    notes += f"\n⚠️ 재생목록 추가 실패: {str(e)[:200]}"
             if cfg.after_upload == "move" and cfg.done_folder_id:
                 try:
                     drive.move(v, cfg.done_folder_id)
-                    moved = "\n(완료 폴더로 이동함)"
+                    notes += "\n(완료 폴더로 이동함)"
                 except Exception as e:  # noqa: BLE001
-                    moved = f"\n⚠️ 완료 폴더 이동 실패: {e}"
-            chat.send(f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{moved}")
+                    notes += f"\n⚠️ 완료 폴더 이동 실패: {e}"
+            chat.send(f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{notes}")
         except QuotaExceeded as e:
             row.set("status", "queued")
             row.set("attempts", max(0, row.attempts - 1))  # 할당량 초과는 시도 횟수에서 제외

@@ -94,3 +94,22 @@ class YouTube:
         if "id" not in response:
             raise RuntimeError(f"업로드 응답에 video id 가 없습니다: {response}")
         return response["id"]
+
+    def add_to_playlist(self, video_id: str, playlist_id: str) -> None:
+        """재생목록 맨 뒤에 추가 (할당량 50 units)."""
+        body = {
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id},
+            }
+        }
+        for attempt in range(4):
+            try:
+                self.svc.playlistItems().insert(part="snippet", body=body).execute()
+                return
+            except HttpError as e:
+                # 업로드 직후엔 영상이 아직 처리 중이라 실패할 수 있어 잠시 후 재시도
+                if attempt < 3 and e.resp.status in (404, 409, 500, 503):
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                raise

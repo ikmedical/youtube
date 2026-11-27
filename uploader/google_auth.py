@@ -14,7 +14,11 @@ from .config import Config
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+# youtube.upload: 업로드, youtube: 재생목록에 추가
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+]
 DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets",

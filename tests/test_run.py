@@ -69,6 +69,11 @@ class FakeYT:
             raise QuotaExceeded("403 quotaExceeded")
         return "YT_" + title
 
+    added = []
+
+    def add_to_playlist(self, video_id, playlist_id):
+        FakeYT.added.append((video_id, playlist_id))
+
 
 class FakeChat:
     msgs = []
@@ -125,3 +130,18 @@ def test_max_per_run(monkeypatch):
     FakeYT.behaviour = {}
     m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
     assert len(FakeSheet.store) == 2
+
+
+def test_playlist(monkeypatch):
+    setup(monkeypatch)
+    FakeYT.behaviour = {}
+    FakeYT.added = []
+    files = [vid(1), vid(2)]
+    files[1].folder_name = "강의"
+    monkeypatch.setattr(FakeDrive, "files", files)
+    c = cfg(monkeypatch, YT_PLAYLIST_ID="https://www.youtube.com/playlist?list=PLdefault&si=x",
+            YT_PLAYLIST_MAP="강의=PLlecture; 기타=PLetc")
+    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    assert FakeYT.added == [("YT_v1", "PLdefault"), ("YT_v2", "PLlecture")]
+    assert {v[0]: v[HEADERS.index("playlist_id")] for v in FakeSheet.store.values()} == {
+        "f1": "PLdefault", "f2": "PLlecture"}

@@ -26,6 +26,24 @@ def _bool(name: str, default: bool) -> bool:
     return raw.lower() in ("1", "true", "yes", "y", "on")
 
 
+def parse_playlist_map(raw: str) -> dict[str, str]:
+    """'폴더이름=재생목록ID' 를 줄바꿈 또는 ; 로 구분. 예) 강의=PLxxx;쇼츠=PLyyy"""
+    out: dict[str, str] = {}
+    for part in raw.replace("\n", ";").split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            if k.strip() and v.strip():
+                out[k.strip()] = clean_playlist_id(v.strip())
+    return out
+
+
+def clean_playlist_id(value: str) -> str:
+    """재생목록 URL 을 붙여 넣어도 ID 만 뽑아낸다."""
+    if "list=" in value:
+        value = value.split("list=", 1)[1].split("&", 1)[0]
+    return value.strip()
+
+
 @dataclass
 class Config:
     # --- OAuth 클라이언트 (Google Cloud 프로젝트의 "데스크톱 앱" OAuth 클라이언트) ---
@@ -52,6 +70,8 @@ class Config:
     title_template: str
     description_template: str
     tags: list[str]
+    playlist_id: str | None
+    playlist_map: dict[str, str]
     max_uploads_per_run: int
     max_attempts: int
     min_file_age_minutes: int
@@ -80,6 +100,8 @@ class Config:
             title_template=_env("YT_TITLE_TEMPLATE", "{stem}") or "{stem}",
             description_template=_env("YT_DESCRIPTION_TEMPLATE", "") or "",
             tags=[t.strip() for t in tags_raw.split(",") if t.strip()],
+            playlist_id=clean_playlist_id(_env("YT_PLAYLIST_ID", "") or "") or None,
+            playlist_map=parse_playlist_map(_env("YT_PLAYLIST_MAP", "") or ""),
             max_uploads_per_run=_int("MAX_UPLOADS_PER_RUN", 3),
             max_attempts=_int("MAX_ATTEMPTS", 3),
             min_file_age_minutes=_int("MIN_FILE_AGE_MINUTES", 10),

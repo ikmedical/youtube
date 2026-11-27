@@ -28,6 +28,7 @@ HEADERS = [
     "started_at",
     "finished_at",
     "error",
+    "playlist_id",
 ]
 COL = {name: i for i, name in enumerate(HEADERS)}
 LAST_COL = chr(ord("A") + len(HEADERS) - 1)  # 'L'
