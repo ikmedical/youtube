@@ -43,24 +43,29 @@ def next_free_slot(sched: tuple[int, int, int], tz: ZoneInfo, occupied: set[str]
                    now: datetime | None = None, min_lead: timedelta = timedelta(hours=1)) -> datetime:
     """다가오는 지정 요일부터 한 주씩 넘기며, 아직 예약된 영상이 없는 첫 날짜를 고른다.
 
-    occupied: 이미 예약된 날짜(YYYY-MM-DD, tz 기준) 집합
+    occupied: 이미 예약된 시각('YYYY-MM-DD HH:MM', tz 기준) 집합.
+    지정 요일·시각(예: 월 08:00)에 정확히 예약된 영상이 있을 때만 그 주가 찬 것으로 본다.
     """
     cand = next_publish_at(sched, tz, now, min_lead)
     for _ in range(520):  # 최대 10년
-        if cand.strftime("%Y-%m-%d") not in occupied:
+        if slot_str(cand) not in occupied:
             return cand
         cand += timedelta(days=7)
     raise RuntimeError("비어 있는 공개 예약 날짜를 찾지 못했습니다.")
 
 
-def date_key(value: str, tz: ZoneInfo) -> str | None:
-    """시트의 'YYYY-MM-DD HH:MM'(tz 기준) 또는 RFC3339(UTC) 문자열 → 'YYYY-MM-DD'(tz 기준)."""
+def slot_str(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def slot_key(value: str, tz: ZoneInfo) -> str | None:
+    """시트의 'YYYY-MM-DD HH:MM'(tz 기준) 또는 RFC3339(UTC) 문자열 → 'YYYY-MM-DD HH:MM'(tz 기준)."""
     value = (value or "").strip()
     if not value:
         return None
     try:
         if "T" in value:
-            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(tz).strftime("%Y-%m-%d")
-        return datetime.fromisoformat(value).strftime("%Y-%m-%d")
+            return slot_str(datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(tz))
+        return slot_str(datetime.fromisoformat(value))
     except ValueError:
         return None

@@ -154,7 +154,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `MAX_UPLOADS_PER_RUN` | `3` | 한 번 실행에 올릴 최대 개수 |
 | `MAX_ATTEMPTS` | `3` | 실패 시 최대 재시도 횟수 |
 | `MIN_FILE_AGE_MINUTES` | `10` | 최근 N분 내 수정된 파일은 아직 올라오는 중으로 보고 다음 실행으로 미룸 |
-| `AFTER_UPLOAD` | `keep` | `keep`(그대로 둠) / `move`(`DONE_FOLDER_ID` 로 이동) |
+| `AFTER_UPLOAD` | `DONE_FOLDER_ID` 가 있으면 `move`, 없으면 `keep` | `move` 면 업로드 후 영상·설명 파일·썸네일을 `DONE_FOLDER_ID` 안의 **영상 이름 폴더**로 함께 옮김 |
 | `INCLUDE_SUBFOLDERS` | `false` | 하위 폴더까지 찾을지 |
 | `CHAT_MENTIONS` | (빈 값) | 실패·조치 필요 알림에서 태그할 사람 (6-1 참고) |
 | `TIMEZONE` | `Asia/Seoul` | 시트·제목의 시간대 |
@@ -181,7 +181,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
   - 급하게 바로 올리고 싶으면 시트에서 `next_try_date` 를 지우면 다음 실행에서 바로 다시 확인합니다.
   - 설명 없이 바로 올리려면 `REQUIRE_DESCRIPTION_FILE=false`
 - 공통 문구를 붙이려면 예: `YT_DESCRIPTION_TEMPLATE` = `{description}\n\n구독과 좋아요 부탁드립니다!`
-- `AFTER_UPLOAD=move` 이면 설명 파일도 영상과 함께 완료 폴더로 옮깁니다.
+- 업로드가 끝나면 영상·설명 파일·썸네일을 완료 폴더 안에 **영상 이름으로 만든 폴더**로 함께 옮깁니다. (`DONE_FOLDER_ID` 설정 시 기본 동작) 이미 올렸는데 원래 폴더에 남아 있는 영상도 다음 실행 때 같은 방식으로 정리됩니다.
 - 시트 `description_file` 칸에 어떤 파일을 썼는지 기록됩니다.
 
 ### 공개 예약 (매주 월요일 오전 8시, 한 주에 한 개)
@@ -191,7 +191,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 - "이미 예약됨" 판단 기준
   1. 관리 시트에 기록된 예약(`publish_at`)
   2. YouTube 채널에 이미 공개 예약이 걸린 영상 (Studio 에서 직접 예약한 것 포함, 최근 업로드 300개 확인)
-  - 같은 날짜(월요일)에 예약이 하나라도 있으면 그 주는 찬 것으로 봅니다.
+  - **월요일 08:00 에 정확히 예약된 영상**이 있을 때만 그 주가 찬 것으로 봅니다. 같은 월요일이라도 다른 시각 예약이나 다른 요일 예약은 상관없습니다.
 - 순서: 기본은 드라이브에 **올라온 순서**. 파일 이름순(`1강, 2강, …, 10강`)으로 하려면 `VIDEO_ORDER=name`
   - 설명 파일이 없어 보류된 영상은 순서를 건너뛰고, 파일이 생긴 뒤 비어 있는 다음 주로 예약됩니다.
 - 월요일 07:00 이후(공개 1시간 전 이내)에는 그 주 월요일은 건너뜁니다.

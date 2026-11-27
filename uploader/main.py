@@ -18,7 +18,7 @@ from .chat import Chat
 from .config import Config
 from .description import clean, norm_title
 from .drive import Drive, DriveFile
-from .schedule import date_key, next_free_slot, parse_schedule, to_rfc3339_utc
+from .schedule import next_free_slot, parse_schedule, slot_key, slot_str, to_rfc3339_utc
 from .google_auth import drive_credentials, youtube_credentials
 from .sheet import Row, Sheet, decide
 from .thumbnail import fit_thumbnail
@@ -112,6 +112,16 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         row = rows.get(v.id)
         ok, reason = decide(row, cfg.max_attempts, today.isoformat())
         if not ok:
+            # 이미 올렸는데 아직 원래 폴더에 남아 있는 영상은 완료 폴더로 정리
+            if (row is not None and row.status == "success" and not cfg.dry_run
+                    and cfg.after_upload == "move" and cfg.done_folder_id):
+                try:
+                    folder_name = drive.move_bundle(v, cfg.done_folder_id)
+                    log.info("이전에 올린 %s 를 완료 폴더 '%s' 로 옮김", v.name, folder_name)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("완료 폴더 이동 실패 %s: %s", v.name, e)
+                    chat.send(f"⚠️ 업로드된 영상을 완료 폴더로 옮기지 못했습니다\n파일: {v.name}\n`{str(e)[:300]}`", mention=True)
+                continue
             if row is not None and row.status == "uploading":
                 log.warning("건너뜀 %s: %s", v.name, reason)
             continue
@@ -156,22 +166,22 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
 
     sched = parse_schedule(cfg.publish_schedule)
     yt = YouTube(youtube_credentials(cfg))
-    # 한 주에 한 개: 이미 예약된 날짜(시트 + 채널에 걸려 있는 예약)는 건너뛴다
+    # 한 주에 한 개: 지정 요일·시각에 이미 예약된 영상(시트 + 채널)이 있으면 그 주는 건너뛴다
     occupied: set[str] = set()
     if sched:
         for r in rows.values():
             if r.status in ("success", "uploading"):
-                k = date_key(r.get("publish_at"), tz)
+                k = slot_key(r.get("publish_at"), tz)
                 if k:
                     occupied.add(k)
         try:
             for pa in yt.scheduled_publish_times():
-                k = date_key(pa, tz)
+                k = slot_key(pa, tz)
                 if k:
                     occupied.add(k)
         except Exception as e:  # noqa: BLE001
             log.warning("채널의 기존 예약 조회 실패(시트 기록만 사용): %s", e)
-        log.info("이미 예약된 날짜: %s", ", ".join(sorted(occupied)) or "(없음)")
+        log.info("이미 예약된 시각: %s", ", ".join(sorted(occupied)) or "(없음)")
     # 재생목록: ① YT_PLAYLIST_MAP ② 하위 폴더 이름과 같은 제목의 재생목록 ③ YT_PLAYLIST_ID
     playlists: dict[str, str] | None = None
 
@@ -235,7 +245,7 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             url = f"https://youtu.be/{video_id}"
             row.set("status", "success")
             if publish_dt:
-                occupied.add(publish_dt.strftime("%Y-%m-%d"))
+                occupied.add(slot_str(publish_dt))
             row.set("youtube_video_id", video_id)
             row.set("youtube_url", url)
             row.set("finished_at", now_str(tz))
@@ -273,11 +283,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
                     notes += f"\n⚠️ 재생목록 추가 실패: {str(e)[:200]}"
             if cfg.after_upload == "move" and cfg.done_folder_id:
                 try:
-                    drive.move(v, cfg.done_folder_id)
-                    for extra in (v.description_file, v.thumbnail_file):
-                        if extra:
-                            drive.move(extra, cfg.done_folder_id)
-                    notes += "\n(완료 폴더로 이동함)"
+                    folder_name = drive.move_bundle(v, cfg.done_folder_id)
+                    notes += f"\n완료 폴더의 '{folder_name}' 폴더로 이동함"
                 except Exception as e:  # noqa: BLE001
                     notes += f"\n⚠️ 완료 폴더 이동 실패: {e}"
             visibility = (
