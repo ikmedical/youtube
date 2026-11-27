@@ -60,6 +60,12 @@ class FakeDrive:
     def move(self, *a):
         pass
 
+    moved = []
+
+    def move_bundle(self, v, done):
+        FakeDrive.moved.append((v.name, done))
+        return v.name[:-4]
+
     def download_bytes(self, fid):
         return b"img-" + fid.encode()
 
@@ -284,3 +290,22 @@ def test_thumbnail_and_folder_playlist(monkeypatch):
     assert any("썸네일 적용함" in t for t in FakeChat.msgs)
     thumb_col = {v[0]: v[HEADERS.index("thumbnail_file")] for v in FakeSheet.store.values()}
     assert thumb_col["f1"] == "v1.jpg"
+
+
+def test_move_after_upload(monkeypatch):
+    setup(monkeypatch)
+    FakeYT.behaviour = {}
+    FakeDrive.moved = []
+    monkeypatch.setattr(FakeDrive, "files", [vid(1)])
+    # DONE_FOLDER_ID 만 넣어도 기본으로 이동
+    monkeypatch.delenv("AFTER_UPLOAD", raising=False)
+    c = cfg(monkeypatch, DONE_FOLDER_ID="done")
+    assert c.after_upload == "move"
+    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    assert FakeDrive.moved == [("v1.mp4", "done")]
+    assert any("'v1' 폴더로 이동함" in t for t in FakeChat.msgs)
+
+    # 이미 올렸지만 원래 폴더에 남아 있던 영상도 다음 실행에서 정리
+    FakeDrive.moved = []
+    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    assert FakeDrive.moved == [("v1.mp4", "done")]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -173,6 +174,28 @@ class Drive:
             supportsAllDrives=True,
             fields="id, parents",
         ).execute()
+
+    def ensure_folder(self, name: str, parent_id: str) -> str:
+        """parent 안에 같은 이름의 폴더가 있으면 그 ID, 없으면 새로 만든다."""
+        safe = name.replace("\\", "\\\\").replace("'", "\\'")
+        found = self._list_children(parent_id, f"mimeType = '{FOLDER_MIME}' and name = '{safe}'")
+        if found:
+            return found[0]["id"]
+        created = self.svc.files().create(
+            body={"name": name, "mimeType": FOLDER_MIME, "parents": [parent_id]},
+            fields="id", supportsAllDrives=True,
+        ).execute()
+        return created["id"]
+
+    def move_bundle(self, v: "DriveFile", done_folder_id: str) -> str:
+        """영상 + 설명 파일 + 썸네일을 완료 폴더 안의 '영상 이름' 폴더로 옮긴다. 만든 폴더 이름 반환."""
+        name = os.path.splitext(v.name)[0].strip() or v.name
+        target = self.ensure_folder(name, done_folder_id)
+        self.move(v, target)
+        for extra in (v.description_file, v.thumbnail_file):
+            if extra:
+                self.move(extra, target)
+        return name
 
     def create_spreadsheet(self, name: str, parent_folder_id: str | None) -> str:
         body = {"name": name, "mimeType": "application/vnd.google-apps.spreadsheet"}

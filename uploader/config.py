@@ -113,7 +113,8 @@ class Config:
             max_uploads_per_run=_int("MAX_UPLOADS_PER_RUN", 3),
             max_attempts=_int("MAX_ATTEMPTS", 3),
             min_file_age_minutes=_int("MIN_FILE_AGE_MINUTES", 10),
-            after_upload=(_env("AFTER_UPLOAD", "keep") or "keep").lower(),
+            # DONE_FOLDER_ID 를 넣었으면 기본으로 옮긴다
+            after_upload=(_env("AFTER_UPLOAD") or ("move" if _env("DONE_FOLDER_ID") else "keep")).lower(),
             done_folder_id=_env("DONE_FOLDER_ID"),
             include_subfolders=_bool("INCLUDE_SUBFOLDERS", False),
             dry_run=_bool("DRY_RUN", False),
