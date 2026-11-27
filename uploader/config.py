@@ -1,0 +1,146 @@
+"""환경변수(= GitHub Actions secrets / variables)에서 설정을 읽는다."""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+def _env(name: str, default: str | None = None, required: bool = False) -> str | None:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        if required:
+            raise SystemExit(f"[config] 필수 환경변수 {name} 가 비어 있습니다.")
+        return default
+    return value
+
+
+def _int(name: str, default: int) -> int:
+    raw = _env(name)
+    return int(raw) if raw else default
+
+
+def _bool(name: str, default: bool) -> bool:
+    raw = _env(name)
+    if raw is None:
+        return default
+    return raw.lower() in ("1", "true", "yes", "y", "on")
+
+
+def parse_playlist_map(raw: str) -> dict[str, str]:
+    """'폴더이름=재생목록ID' 를 줄바꿈 또는 ; 로 구분. 예) 강의=PLxxx;쇼츠=PLyyy"""
+    out: dict[str, str] = {}
+    for part in raw.replace("\n", ";").split(";"):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            if k.strip() and v.strip():
+                out[k.strip()] = clean_playlist_id(v.strip())
+    return out
+
+
+def clean_playlist_id(value: str) -> str:
+    """재생목록 URL 을 붙여 넣어도 ID 만 뽑아낸다."""
+    if "list=" in value:
+        value = value.split("list=", 1)[1].split("&", 1)[0]
+    return value.strip()
+
+
+@dataclass
+class Config:
+    # --- OAuth 클라이언트 (Google Cloud 프로젝트의 "데스크톱 앱" OAuth 클라이언트) ---
+    google_client_id: str | None
+    google_client_secret: str | None
+
+    # --- YouTube 채널 계정 ---
+    youtube_refresh_token: str | None
+
+    # --- 공유 드라이브 계정 (둘 중 하나) ---
+    drive_service_account_json: str | None
+    drive_refresh_token: str | None
+
+    # --- 대상 ---
+    drive_folder_id: str | None
+    sheet_id: str | None
+    sheet_tab: str
+    chat_webhook_url: str | None
+
+    # --- 동작 옵션 ---
+    privacy_status: str
+    publish_schedule: str | None
+    video_order: str  # created | name
+    category_id: str
+    made_for_kids: bool
+    title_template: str
+    description_template: str
+    require_description_file: bool
+    tags: list[str]
+    playlist_id: str | None
+    playlist_map: dict[str, str]
+    max_uploads_per_run: int
+    max_attempts: int
+    min_file_age_minutes: int
+    after_upload: str  # keep | move
+    done_folder_id: str | None
+    include_subfolders: bool
+    dry_run: bool
+    timezone: str
+
+    @classmethod
+    def from_env(cls) -> "Config":
+        tags_raw = _env("YT_TAGS", "") or ""
+        return cls(
+            google_client_id=_env("GOOGLE_CLIENT_ID"),
+            google_client_secret=_env("GOOGLE_CLIENT_SECRET"),
+            youtube_refresh_token=_env("YT_REFRESH_TOKEN"),
+            drive_service_account_json=_env("DRIVE_SERVICE_ACCOUNT_JSON"),
+            drive_refresh_token=_env("DRIVE_REFRESH_TOKEN"),
+            drive_folder_id=_env("DRIVE_FOLDER_ID"),
+            sheet_id=_env("SHEET_ID"),
+            sheet_tab=_env("SHEET_TAB", "uploads") or "uploads",
+            chat_webhook_url=_env("GOOGLE_CHAT_WEBHOOK_URL"),
+            privacy_status=(_env("YT_PRIVACY_STATUS", "private") or "private").lower(),
+            publish_schedule=_env("YT_PUBLISH_SCHEDULE", "MON 08:00"),
+            video_order=(_env("VIDEO_ORDER", "created") or "created").lower(),
+            category_id=_env("YT_CATEGORY_ID", "22") or "22",
+            made_for_kids=_bool("YT_MADE_FOR_KIDS", False),
+            title_template=_env("YT_TITLE_TEMPLATE", "{stem}") or "{stem}",
+            description_template=_env("YT_DESCRIPTION_TEMPLATE", "{description}") or "{description}",
+            require_description_file=_bool("REQUIRE_DESCRIPTION_FILE", True),
+            tags=[t.strip() for t in tags_raw.split(",") if t.strip()],
+            playlist_id=clean_playlist_id(_env("YT_PLAYLIST_ID", "") or "") or None,
+            playlist_map=parse_playlist_map(_env("YT_PLAYLIST_MAP", "") or ""),
+            max_uploads_per_run=_int("MAX_UPLOADS_PER_RUN", 3),
+            max_attempts=_int("MAX_ATTEMPTS", 3),
+            min_file_age_minutes=_int("MIN_FILE_AGE_MINUTES", 10),
+            after_upload=(_env("AFTER_UPLOAD", "keep") or "keep").lower(),
+            done_folder_id=_env("DONE_FOLDER_ID"),
+            include_subfolders=_bool("INCLUDE_SUBFOLDERS", False),
+            dry_run=_bool("DRY_RUN", False),
+            timezone=_env("TIMEZONE", "Asia/Seoul") or "Asia/Seoul",
+        )
+
+    def validate_for_run(self) -> None:
+        missing = []
+        if not self.drive_folder_id:
+            missing.append("DRIVE_FOLDER_ID")
+        if not self.sheet_id:
+            missing.append("SHEET_ID")
+        if not self.dry_run:
+            for name, val in (
+                ("GOOGLE_CLIENT_ID", self.google_client_id),
+                ("GOOGLE_CLIENT_SECRET", self.google_client_secret),
+                ("YT_REFRESH_TOKEN", self.youtube_refresh_token),
+            ):
+                if not val:
+                    missing.append(name)
+        if not (self.drive_service_account_json or self.drive_refresh_token):
+            missing.append("DRIVE_SERVICE_ACCOUNT_JSON 또는 DRIVE_REFRESH_TOKEN")
+        if self.privacy_status not in ("private", "unlisted", "public"):
+            raise SystemExit("[config] YT_PRIVACY_STATUS 는 private / unlisted / public 중 하나여야 합니다.")
+        if self.video_order not in ("created", "name"):
+            raise SystemExit("[config] VIDEO_ORDER 는 created 또는 name 이어야 합니다.")
+        if self.after_upload not in ("keep", "move"):
+            raise SystemExit("[config] AFTER_UPLOAD 는 keep 또는 move 여야 합니다.")
+        if self.after_upload == "move" and not self.done_folder_id:
+            missing.append("DONE_FOLDER_ID (AFTER_UPLOAD=move 일 때)")
+        if missing:
+            raise SystemExit("[config] 다음 값이 비어 있습니다: " + ", ".join(missing))
