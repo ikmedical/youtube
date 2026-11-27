@@ -75,6 +75,7 @@ class Config:
     tags: list[str]
     playlist_id: str | None
     playlist_map: dict[str, str]
+    playlist_from_folder: bool
     max_uploads_per_run: int
     max_attempts: int
     min_file_age_minutes: int
@@ -108,6 +109,7 @@ class Config:
             tags=[t.strip() for t in tags_raw.split(",") if t.strip()],
             playlist_id=clean_playlist_id(_env("YT_PLAYLIST_ID", "") or "") or None,
             playlist_map=parse_playlist_map(_env("YT_PLAYLIST_MAP", "") or ""),
+            playlist_from_folder=_bool("PLAYLIST_FROM_FOLDER", True),
             max_uploads_per_run=_int("MAX_UPLOADS_PER_RUN", 3),
             max_attempts=_int("MAX_ATTEMPTS", 3),
             min_file_age_minutes=_int("MIN_FILE_AGE_MINUTES", 10),

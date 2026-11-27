@@ -43,6 +43,12 @@ class FakeDrive:
     def __init__(self, *a):
         pass
 
+    def folder_info(self, fid):
+        return {"id": fid, "name": "test"}
+
+    def describe_children(self, fid):
+        return ""
+
     def list_videos(self, *a):
         return list(self.files)
 
@@ -53,6 +59,9 @@ class FakeDrive:
 
     def move(self, *a):
         pass
+
+    def download_bytes(self, fid):
+        return b"img-" + fid.encode()
 
     def read_text(self, doc):
         return "  설명 본문\r\n\r\n\r\n둘째 줄  "
@@ -74,6 +83,15 @@ class FakeYT:
 
     added = []
     scheduled = []  # 채널에 이미 걸려 있는 예약(RFC3339)
+
+    thumbs = []
+    playlists = {}
+
+    def playlists_by_title(self):
+        return dict(FakeYT.playlists)
+
+    def set_thumbnail(self, video_id, data, mime):
+        FakeYT.thumbs.append((video_id, data, mime))
 
     def scheduled_publish_times(self):
         return list(FakeYT.scheduled)
@@ -247,3 +265,22 @@ def test_one_video_per_week(monkeypatch):
     m._run(cfg(monkeypatch), FakeChat(), tz)
     assert publish["v3"] == m.to_rfc3339_utc(slot1)  # 비어 있는 첫 주를 채움
     FakeYT.scheduled = []
+
+
+def test_thumbnail_and_folder_playlist(monkeypatch):
+    setup(monkeypatch)
+    FakeYT.behaviour, FakeYT.added, FakeYT.thumbs = {}, [], []
+    FakeYT.playlists = {"보청기 이야기": "PLhear"}
+    files = [vid(1), vid(2), vid(3)]
+    files[0].folder_name = "보청기  이야기"      # 공백·대소문자 달라도 매칭
+    files[0].thumbnail_file = {"id": "t1", "name": "v1.jpg", "mimeType": "image/jpeg", "parents": ["p"]}
+    files[1].folder_name = "없는 폴더"            # 같은 이름 재생목록 없음 → 기본 재생목록
+    monkeypatch.setattr(FakeDrive, "files", files)
+    c = cfg(monkeypatch, YT_PLAYLIST_ID="PLdefault")
+    chat = FakeChat()
+    m._run(c, chat, ZoneInfo("Asia/Seoul"))
+    assert FakeYT.added == [("YT_v1", "PLhear"), ("YT_v2", "PLdefault"), ("YT_v3", "PLdefault")]
+    assert FakeYT.thumbs == [("YT_v1", b"img-t1", "image/jpeg")]
+    assert any("썸네일 적용함" in t for t in FakeChat.msgs)
+    thumb_col = {v[0]: v[HEADERS.index("thumbnail_file")] for v in FakeSheet.store.values()}
+    assert thumb_col["f1"] == "v1.jpg"

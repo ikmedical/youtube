@@ -14,6 +14,7 @@ from .description import DESCRIPTION_MIMES, GDOC_MIME, PRIORITY, TXT_MIME, docx_
 log = logging.getLogger(__name__)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
+IMAGE_PRIORITY = {"image/jpeg": 0, "image/png": 1}
 FIELDS = "nextPageToken, files(id, name, mimeType, size, createdTime, modifiedTime, parents, md5Checksum)"
 
 
@@ -28,6 +29,7 @@ class DriveFile:
     parents: list[str]
     folder_name: str = ""  # 하위 폴더 이름 (최상위 폴더면 빈 값)
     description_file: dict | None = None  # 같은 이름의 설명 파일 {id, name, mimeType, parents}
+    thumbnail_file: dict | None = None  # 같은 이름의 이미지 파일 (jpg/png)
 
     @property
     def modified_dt(self) -> datetime:
@@ -61,12 +63,37 @@ class Drive:
             if not token:
                 return out
 
+    def folder_info(self, folder_id: str) -> dict:
+        """폴더 접근 확인. 권한이 없거나 ID 가 틀리면 알기 쉬운 오류로 바꾼다."""
+        from googleapiclient.errors import HttpError
+
+        try:
+            return self.svc.files().get(
+                fileId=folder_id, fields="id, name, mimeType, driveId", supportsAllDrives=True
+            ).execute()
+        except HttpError as e:
+            if e.resp.status in (403, 404):
+                raise RuntimeError(
+                    f"드라이브 폴더({folder_id})를 찾을 수 없거나 접근 권한이 없습니다. "
+                    "DRIVE_FOLDER_ID 와, 토큰을 발급한 계정이 그 공유 드라이브 멤버인지 확인하세요."
+                ) from e
+            raise
+
+    def describe_children(self, folder_id: str, limit: int = 10) -> str:
+        """영상이 0개일 때 원인 파악용: 폴더 안에 무엇이 있는지 요약."""
+        items = self._list_children(folder_id, "mimeType != 'x'")
+        folders = [f["name"] for f in items if f["mimeType"] == FOLDER_MIME]
+        others = [f"{f['name']} ({f['mimeType']})" for f in items if f["mimeType"] != FOLDER_MIME]
+        return (f"폴더 안 항목 {len(items)}개 - 하위 폴더 {len(folders)}개: {folders[:limit]}, "
+                f"기타 파일 {len(others)}개: {others[:limit]}")
+
     def list_videos(self, folder_id: str, include_subfolders: bool = False,
                     exclude_folder_ids: set[str] | None = None) -> list[DriveFile]:
         exclude = exclude_folder_ids or set()
         folders: list[tuple[str, str]] = [(folder_id, "")]
         videos: list[DriveFile] = []
         mime_q = " or ".join(f"mimeType = '{m}'" for m in DESCRIPTION_MIMES)
+        img_q = " or ".join(f"mimeType = '{m}'" for m in IMAGE_PRIORITY)
         while folders:
             fid, fname = folders.pop(0)
             docs: dict[str, dict] = {}
@@ -74,6 +101,11 @@ class Drive:
                 key = norm_stem(d["name"], d["mimeType"])
                 if key not in docs or PRIORITY[d["mimeType"]] < PRIORITY[docs[key]["mimeType"]]:
                     docs[key] = d
+            thumbs: dict[str, dict] = {}
+            for t in self._list_children(fid, img_q):
+                key = norm_stem(t["name"])
+                if key not in thumbs or IMAGE_PRIORITY[t["mimeType"]] < IMAGE_PRIORITY[thumbs[key]["mimeType"]]:
+                    thumbs[key] = t
             for f in self._list_children(fid, "mimeType contains 'video/'"):
                 videos.append(
                     DriveFile(
@@ -86,6 +118,7 @@ class Drive:
                         parents=f.get("parents", []),
                         folder_name=fname,
                         description_file=docs.get(norm_stem(f["name"])),
+                        thumbnail_file=thumbs.get(norm_stem(f["name"])),
                     )
                 )
             if include_subfolders:
@@ -116,6 +149,9 @@ class Drive:
                     if pct // 10 != last // 10:
                         log.info("  다운로드 %d%%", pct)
                         last = pct
+
+    def download_bytes(self, file_id: str) -> bytes:
+        return self.svc.files().get_media(fileId=file_id, supportsAllDrives=True).execute()
 
     def read_text(self, doc: dict) -> str:
         """설명 파일 내용을 텍스트로 읽는다."""

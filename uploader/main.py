@@ -16,11 +16,12 @@ from zoneinfo import ZoneInfo
 
 from .chat import Chat
 from .config import Config
-from .description import clean
+from .description import clean, norm_title
 from .drive import Drive, DriveFile
 from .schedule import date_key, next_free_slot, parse_schedule, to_rfc3339_utc
 from .google_auth import drive_credentials, youtube_credentials
 from .sheet import Row, Sheet, decide
+from .thumbnail import fit_thumbnail
 from .youtube import QuotaExceeded, YouTube
 
 log = logging.getLogger("uploader")
@@ -91,11 +92,17 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         sheet.ensure_ready()
     rows = sheet.load()
 
+    folder = drive.folder_info(cfg.drive_folder_id)
+    log.info("대상 폴더: %s", folder.get("name"))
     exclude = {cfg.done_folder_id} if cfg.done_folder_id else set()
     videos = drive.list_videos(cfg.drive_folder_id, cfg.include_subfolders, exclude)
     if cfg.video_order == "name":
         videos.sort(key=lambda v: natural_key(v.name))
     log.info("드라이브 영상 %d개, 시트 기록 %d건", len(videos), len(rows))
+    if not videos:
+        log.info("영상이 없습니다. %s", drive.describe_children(cfg.drive_folder_id))
+        if not cfg.include_subfolders:
+            log.info("하위 폴더 안의 영상까지 찾으려면 INCLUDE_SUBFOLDERS=true 로 설정하세요.")
 
     today = datetime.now(tz).date()
     tomorrow = (today + timedelta(days=1)).isoformat()
@@ -165,6 +172,25 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         except Exception as e:  # noqa: BLE001
             log.warning("채널의 기존 예약 조회 실패(시트 기록만 사용): %s", e)
         log.info("이미 예약된 날짜: %s", ", ".join(sorted(occupied)) or "(없음)")
+    # 재생목록: ① YT_PLAYLIST_MAP ② 하위 폴더 이름과 같은 제목의 재생목록 ③ YT_PLAYLIST_ID
+    playlists: dict[str, str] | None = None
+
+    def playlist_for(v: DriveFile) -> str | None:
+        nonlocal playlists
+        if v.folder_name in cfg.playlist_map:
+            return cfg.playlist_map[v.folder_name]
+        if cfg.playlist_from_folder and v.folder_name:
+            if playlists is None:
+                try:
+                    playlists = yt.playlists_by_title()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("재생목록 목록 조회 실패: %s", e)
+                    playlists = {}
+            pid = playlists.get(norm_title(v.folder_name))
+            if pid:
+                return pid
+        return cfg.playlist_id
+
     uploaded = failed = 0
     for v, row, reason in todo[: cfg.max_uploads_per_run]:
         if row is None:
@@ -217,7 +243,23 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             uploaded += 1
             log.info("✔ 완료 %s → %s", v.name, url)
             notes = ""
-            playlist_id = cfg.playlist_map.get(v.folder_name) or cfg.playlist_id
+            # 썸네일: 같은 이름의 이미지 파일
+            if v.thumbnail_file:
+                try:
+                    data, mime = fit_thumbnail(drive.download_bytes(v.thumbnail_file["id"]), v.thumbnail_file["mimeType"])
+                    yt.set_thumbnail(video_id, data, mime)
+                    row.set("thumbnail_file", v.thumbnail_file["name"])
+                    notes += "\n썸네일 적용함"
+                except Exception as e:  # noqa: BLE001
+                    log.warning("썸네일 실패 %s: %s", v.thumbnail_file["name"], e)
+                    row.set("thumbnail_file", f"실패: {v.thumbnail_file['name']}")
+                    row.set("error", f"썸네일 실패: {str(e)[:300]}")
+                    hint = " (채널 전화번호 인증이 필요할 수 있습니다)" if "forbidden" in str(e).lower() or "403" in str(e) else ""
+                    notes += f"\n⚠️ 썸네일 적용 실패{hint}: {str(e)[:200]}"
+                sheet.save(row)
+            else:
+                notes += "\nℹ️ 같은 이름의 썸네일 이미지가 없어 YouTube 자동 썸네일을 사용합니다."
+            playlist_id = playlist_for(v)
             if playlist_id:
                 try:
                     yt.add_to_playlist(video_id, playlist_id)
@@ -232,8 +274,9 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             if cfg.after_upload == "move" and cfg.done_folder_id:
                 try:
                     drive.move(v, cfg.done_folder_id)
-                    if v.description_file:
-                        drive.move(v.description_file, cfg.done_folder_id)
+                    for extra in (v.description_file, v.thumbnail_file):
+                        if extra:
+                            drive.move(extra, cfg.done_folder_id)
                     notes += "\n(완료 폴더로 이동함)"
                 except Exception as e:  # noqa: BLE001
                     notes += f"\n⚠️ 완료 폴더 이동 실패: {e}"

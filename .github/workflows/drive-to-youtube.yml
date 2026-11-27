@@ -29,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -64,6 +64,7 @@ jobs:
           REQUIRE_DESCRIPTION_FILE: ${{ vars.REQUIRE_DESCRIPTION_FILE }}
           YT_PLAYLIST_ID: ${{ vars.YT_PLAYLIST_ID }}
           YT_PLAYLIST_MAP: ${{ vars.YT_PLAYLIST_MAP }}
+          PLAYLIST_FROM_FOLDER: ${{ vars.PLAYLIST_FROM_FOLDER }}
           MAX_UPLOADS_PER_RUN: ${{ inputs.max_uploads || vars.MAX_UPLOADS_PER_RUN }}
           MAX_ATTEMPTS: ${{ vars.MAX_ATTEMPTS }}
           MIN_FILE_AGE_MINUTES: ${{ vars.MIN_FILE_AGE_MINUTES }}
