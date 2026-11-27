@@ -67,6 +67,10 @@ def main() -> int:
     cfg = Config.from_env()
     chat = Chat(cfg.chat_webhook_url)
     tz = ZoneInfo(cfg.timezone)
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and not (cfg.drive_folder_id and cfg.sheet_id):
+        # 아직 설정 전이면 예약 실행은 조용히 건너뜀 (매시간 실패 메일 방지)
+        log.info("DRIVE_FOLDER_ID / SHEET_ID 가 아직 설정되지 않아 예약 실행을 건너뜁니다.")
+        return 0
     try:
         cfg.validate_for_run()
         return _run(cfg, chat, tz)
