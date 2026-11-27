@@ -91,11 +91,17 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         sheet.ensure_ready()
     rows = sheet.load()
 
+    folder = drive.folder_info(cfg.drive_folder_id)
+    log.info("대상 폴더: %s", folder.get("name"))
     exclude = {cfg.done_folder_id} if cfg.done_folder_id else set()
     videos = drive.list_videos(cfg.drive_folder_id, cfg.include_subfolders, exclude)
     if cfg.video_order == "name":
         videos.sort(key=lambda v: natural_key(v.name))
     log.info("드라이브 영상 %d개, 시트 기록 %d건", len(videos), len(rows))
+    if not videos:
+        log.info("영상이 없습니다. %s", drive.describe_children(cfg.drive_folder_id))
+        if not cfg.include_subfolders:
+            log.info("하위 폴더 안의 영상까지 찾으려면 INCLUDE_SUBFOLDERS=true 로 설정하세요.")
 
     today = datetime.now(tz).date()
     tomorrow = (today + timedelta(days=1)).isoformat()

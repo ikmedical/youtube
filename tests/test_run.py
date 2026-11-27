@@ -43,6 +43,12 @@ class FakeDrive:
     def __init__(self, *a):
         pass
 
+    def folder_info(self, fid):
+        return {"id": fid, "name": "test"}
+
+    def describe_children(self, fid):
+        return ""
+
     def list_videos(self, *a):
         return list(self.files)
 

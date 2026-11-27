@@ -61,6 +61,30 @@ class Drive:
             if not token:
                 return out
 
+    def folder_info(self, folder_id: str) -> dict:
+        """폴더 접근 확인. 권한이 없거나 ID 가 틀리면 알기 쉬운 오류로 바꾼다."""
+        from googleapiclient.errors import HttpError
+
+        try:
+            return self.svc.files().get(
+                fileId=folder_id, fields="id, name, mimeType, driveId", supportsAllDrives=True
+            ).execute()
+        except HttpError as e:
+            if e.resp.status in (403, 404):
+                raise RuntimeError(
+                    f"드라이브 폴더({folder_id})를 찾을 수 없거나 접근 권한이 없습니다. "
+                    "DRIVE_FOLDER_ID 와, 토큰을 발급한 계정이 그 공유 드라이브 멤버인지 확인하세요."
+                ) from e
+            raise
+
+    def describe_children(self, folder_id: str, limit: int = 10) -> str:
+        """영상이 0개일 때 원인 파악용: 폴더 안에 무엇이 있는지 요약."""
+        items = self._list_children(folder_id, "mimeType != 'x'")
+        folders = [f["name"] for f in items if f["mimeType"] == FOLDER_MIME]
+        others = [f"{f['name']} ({f['mimeType']})" for f in items if f["mimeType"] != FOLDER_MIME]
+        return (f"폴더 안 항목 {len(items)}개 - 하위 폴더 {len(folders)}개: {folders[:limit]}, "
+                f"기타 파일 {len(others)}개: {others[:limit]}")
+
     def list_videos(self, folder_id: str, include_subfolders: bool = False,
                     exclude_folder_ids: set[str] | None = None) -> list[DriveFile]:
         exclude = exclude_folder_ids or set()
