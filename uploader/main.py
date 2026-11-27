@@ -9,7 +9,7 @@ import os
 import sys
 import tempfile
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .chat import Chat
@@ -83,21 +83,46 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
     videos = drive.list_videos(cfg.drive_folder_id, cfg.include_subfolders, exclude)
     log.info("드라이브 영상 %d개, 시트 기록 %d건", len(videos), len(rows))
 
+    today = datetime.now(tz).date()
+    tomorrow = (today + timedelta(days=1)).isoformat()
     todo: list[tuple[DriveFile, Row | None, str]] = []
+    waiting: list[DriveFile] = []
     for v in videos:
         row = rows.get(v.id)
-        ok, reason = decide(row, cfg.max_attempts)
+        ok, reason = decide(row, cfg.max_attempts, today.isoformat())
         if not ok:
             if row is not None and row.status == "uploading":
                 log.warning("건너뜀 %s: %s", v.name, reason)
             continue
-        if cfg.require_description_file and not v.description_file:
-            log.info("건너뜀 %s: 같은 이름의 설명 파일(.docx 등)이 아직 없음", v.name)
-            continue
         if not Drive.is_stable(v, cfg.min_file_age_minutes):
             log.info("건너뜀 %s: 최근 %d분 내 수정됨(업로드 중일 수 있음)", v.name, cfg.min_file_age_minutes)
             continue
+        if cfg.require_description_file and not v.description_file:
+            log.info("대기 %s: 같은 이름의 설명 파일이 없음 → %s 에 다시 확인", v.name, tomorrow)
+            if not cfg.dry_run:
+                if row is None:
+                    row = sheet.new_row()
+                    row.set("drive_file_id", v.id)
+                row.set("file_name", v.name)
+                row.set("size_mb", f"{v.size / 1024 / 1024:.1f}")
+                row.set("drive_created", v.created_time)
+                row.set("status", "waiting")
+                row.set("next_try_date", tomorrow)
+                row.set("error", "같은 이름의 설명 파일(.docx/Google 문서/.txt) 없음")
+                row.set("finished_at", now_str(tz))
+                sheet.save(row)
+                waiting.append(v)
+            continue
         todo.append((v, row, reason))
+
+    if waiting:
+        names = "\n".join(f"• {w.name}  →  필요한 파일: {os.path.splitext(w.name)[0]}.docx" for w in waiting[:20])
+        more = f"\n…외 {len(waiting) - 20}개" if len(waiting) > 20 else ""
+        chat.send(
+            "📝 *설명 파일이 없어 업로드를 보류했습니다*\n"
+            f"{names}{more}\n"
+            f"같은 폴더에 같은 이름의 워드 파일을 올려 주세요. {tomorrow} 에 다시 확인합니다."
+        )
 
     log.info("업로드 대상 %d개 (이번 실행 최대 %d개)", len(todo), cfg.max_uploads_per_run)
     if cfg.dry_run:
@@ -134,6 +159,7 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         row.set("started_at", now_str(tz))
         row.set("finished_at", "")
         row.set("error", "")
+        row.set("next_try_date", "")
         sheet.save(row)
         log.info("▶ %s (%s, %.1fMB)", v.name, reason, v.size / 1024 / 1024)
 

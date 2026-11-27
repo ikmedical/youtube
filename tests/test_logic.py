@@ -28,6 +28,10 @@ def test_decide():
     assert decide(row("failed", 2), 3)[0] is True
     assert decide(row("failed", 3), 3)[0] is False
     assert decide(row("", 0), 3)[0] is True
+    w = row("waiting")
+    w.set("next_try_date", "2026-11-28")
+    assert decide(w, 3, "2026-11-27")[0] is False
+    assert decide(w, 3, "2026-11-28")[0] is True
 
 
 def test_render_and_title():

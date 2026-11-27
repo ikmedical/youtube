@@ -100,7 +100,7 @@ class Config:
             made_for_kids=_bool("YT_MADE_FOR_KIDS", False),
             title_template=_env("YT_TITLE_TEMPLATE", "{stem}") or "{stem}",
             description_template=_env("YT_DESCRIPTION_TEMPLATE", "{description}") or "{description}",
-            require_description_file=_bool("REQUIRE_DESCRIPTION_FILE", False),
+            require_description_file=_bool("REQUIRE_DESCRIPTION_FILE", True),
             tags=[t.strip() for t in tags_raw.split(",") if t.strip()],
             playlist_id=clean_playlist_id(_env("YT_PLAYLIST_ID", "") or "") or None,
             playlist_map=parse_playlist_map(_env("YT_PLAYLIST_MAP", "") or ""),

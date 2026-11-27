@@ -8,6 +8,7 @@ status 값
   failed    : 실패 → attempts < MAX_ATTEMPTS 이면 다음 실행에서 재시도
   queued    : 할당량 초과 등으로 미뤄짐 → 다음 실행에서 재시도 (시도 횟수에 포함 안 함)
   skip      : 사람이 직접 입력하면 해당 파일을 업로드하지 않음
+  waiting   : 같은 이름의 설명 파일이 없어 대기 중 → next_try_date 날짜에 다시 확인
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ HEADERS = [
     "error",
     "playlist_id",
     "description_file",
+    "next_try_date",
 ]
 COL = {name: i for i, name in enumerate(HEADERS)}
 LAST_COL = chr(ord("A") + len(HEADERS) - 1)  # 'L'
@@ -65,8 +67,8 @@ class Row:
             return 0
 
 
-def decide(row: Row | None, max_attempts: int) -> tuple[bool, str]:
-    """(업로드할지, 이유)"""
+def decide(row: Row | None, max_attempts: int, today: str = "") -> tuple[bool, str]:
+    """(업로드할지, 이유). today 는 YYYY-MM-DD"""
     if row is None:
         return True, "new"
     st = row.status
@@ -74,6 +76,11 @@ def decide(row: Row | None, max_attempts: int) -> tuple[bool, str]:
         return False, st
     if st == "uploading":
         return False, "uploading (이전 실행이 중단됨 - 유튜브 확인 후 status 를 success/failed 로 바꿔주세요)"
+    if st == "waiting":
+        nxt = row.get("next_try_date").strip()
+        if not nxt or not today or today >= nxt:
+            return True, "waiting → 설명 파일 다시 확인"
+        return False, f"waiting (설명 파일 없음, {nxt}에 다시 확인)"
     if st == "queued":
         return True, "queued"
     if st == "failed":
@@ -148,7 +155,7 @@ class Sheet:
                             "type": "ONE_OF_LIST",
                             "values": [
                                 {"userEnteredValue": v}
-                                for v in ("uploading", "success", "failed", "queued", "skip")
+                                for v in ("uploading", "success", "failed", "queued", "skip", "waiting")
                             ],
                         },
                         "showCustomUi": True,

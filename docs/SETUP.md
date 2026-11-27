@@ -123,7 +123,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `YT_PRIVACY_STATUS` | `private` | `private` / `unlisted` / `public` |
 | `YT_TITLE_TEMPLATE` | `{stem}` | 사용 가능: `{stem}`(확장자 뺀 파일명) `{name}` `{date}` `{datetime}` `{created_date}` |
 | `YT_DESCRIPTION_TEMPLATE` | `{description}` | 설명 형식. `{description}` = 같은 이름 설명 파일 내용. 그 외 제목과 같은 치환자 사용, 줄바꿈은 `\n` |
-| `REQUIRE_DESCRIPTION_FILE` | `false` | `true` 면 같은 이름의 설명 파일이 올라올 때까지 그 영상은 업로드하지 않고 기다림 |
+| `REQUIRE_DESCRIPTION_FILE` | `true` | 같은 이름의 설명 파일이 없으면 업로드를 보류하고 Chat 으로 알린 뒤 다음날 다시 확인. `false` 면 설명 없이 바로 업로드 |
 | `YT_TAGS` | (빈 값) | 쉼표로 구분 |
 | `YT_PLAYLIST_ID` | (빈 값) | 업로드한 영상을 넣을 기본 재생목록 ID 또는 URL |
 | `YT_PLAYLIST_MAP` | (빈 값) | 하위 폴더별 재생목록. `폴더이름=재생목록ID` 를 `;` 또는 줄바꿈으로 구분 (예: `강의=PLaaa;쇼츠=PLbbb`). `INCLUDE_SUBFOLDERS=true` 필요 |
@@ -151,7 +151,12 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 - 이름 비교는 확장자·대소문자·앞뒤 공백을 무시합니다.
 - 글자만 가져옵니다(굵게, 링크 서식, 이미지는 빠짐). URL 을 글로 적어 두면 YouTube 에서 자동으로 링크가 됩니다.
 - YouTube 제한: 최대 5,000 바이트(한글 약 1,600자). 넘으면 잘리고, `<` `>` 는 지워집니다.
-- **설명 파일이 없으면**: 기본값은 `YT_DESCRIPTION_TEMPLATE` 기준(기본: 빈 설명)으로 그대로 올리고 Chat 에 "설명 파일 없음"을 알려 줍니다. 영상보다 문서를 늦게 올리는 경우가 있다면 `REQUIRE_DESCRIPTION_FILE=true` 로 설정해 문서가 생길 때까지 기다리게 하세요.
+- **설명 파일이 없으면** (기본):
+  1. 업로드하지 않고 Chat 으로 "설명 파일이 없어 보류" 알림 (어떤 이름의 워드 파일이 필요한지 함께 표시)
+  2. 시트에 `waiting` 상태와 다시 확인할 날짜(`next_try_date`, 다음날)를 기록
+  3. 다음날 첫 실행에서 다시 확인 → 파일이 있으면 업로드, 여전히 없으면 다시 알리고 하루 더 대기 (하루 한 번만 알림)
+  - 급하게 바로 올리고 싶으면 시트에서 `next_try_date` 를 지우면 다음 실행에서 바로 다시 확인합니다.
+  - 설명 없이 바로 올리려면 `REQUIRE_DESCRIPTION_FILE=false`
 - 공통 문구를 붙이려면 예: `YT_DESCRIPTION_TEMPLATE` = `{description}\n\n구독과 좋아요 부탁드립니다!`
 - `AFTER_UPLOAD=move` 이면 설명 파일도 영상과 함께 완료 폴더로 옮깁니다.
 - 시트 `description_file` 칸에 어떤 파일을 썼는지 기록됩니다.
@@ -196,6 +201,7 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 | `failed` | 실패, `MAX_ATTEMPTS` 까지 자동 재시도 | 계속 실패하면 `error` 확인 |
 | `queued` | 할당량 초과로 대기 | - (다음 실행에서 자동 진행) |
 | `uploading` | 업로드 도중 실행이 중단됨 | YouTube Studio에서 올라갔는지 확인 후 `success` 또는 `queued` 로 변경 |
+| `waiting` | 설명 파일이 없어 보류 중, `next_try_date` 에 다시 확인 | 같은 이름의 워드 파일 올리기 |
 | `skip` | 업로드 제외 | 올리지 않을 파일은 행을 추가하고 `drive_file_id` + `skip` 입력 |
 
 다시 올리고 싶은 파일은 status 를 `queued` 로 바꾸면 됩니다.

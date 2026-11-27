@@ -96,7 +96,8 @@ def setup(monkeypatch):
 
 
 def cfg(monkeypatch, **env):
-    base = dict(DRIVE_FOLDER_ID="p", SHEET_ID="s", DRIVE_REFRESH_TOKEN="x", MAX_UPLOADS_PER_RUN="5")
+    base = dict(DRIVE_FOLDER_ID="p", SHEET_ID="s", DRIVE_REFRESH_TOKEN="x", MAX_UPLOADS_PER_RUN="5",
+                REQUIRE_DESCRIPTION_FILE="false")
     base.update(env)
     for k, v in base.items():
         monkeypatch.setenv(k, v)
@@ -164,15 +165,40 @@ def test_description_file(monkeypatch):
     files = [vid(1), vid(2), vid(3)]
     files[0].description_file = {"id": "d1", "name": "v1.docx", "mimeType": "x", "parents": ["p"]}
     monkeypatch.setattr(FakeDrive, "files", files)
+    tz = ZoneInfo("Asia/Seoul")
+    today = m.datetime.now(tz).date()
+    tomorrow = (today + m.timedelta(days=1)).isoformat()
 
-    # 설명 파일이 없으면 기다리는 옵션: v1 만 업로드
+    # 설명 파일이 없으면 보류 + 알림, 다음날 다시 확인
+    monkeypatch.delenv("REQUIRE_DESCRIPTION_FILE", raising=False)
+    assert Config.from_env().require_description_file is True  # 기본값
     c = cfg(monkeypatch, REQUIRE_DESCRIPTION_FILE="true")
-    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
+    m._run(c, FakeChat(), tz)
     assert got == {"v1": "설명 본문\n\n둘째 줄"}
-    assert len(FakeSheet.store) == 1
+    st = {v[0]: (v[HEADERS.index("status")], v[HEADERS.index("next_try_date")]) for v in FakeSheet.store.values()}
+    assert st == {"f1": ("success", ""), "f2": ("waiting", tomorrow), "f3": ("waiting", tomorrow)}
+    assert sum("보류" in t for t in FakeChat.msgs) == 1
 
-    # 기본값: 없으면 기본 설명(빈 값)으로 업로드
+    # 같은 날 다시 실행: 파일이 생겨도 다음날까지 기다리고, 알림도 다시 안 보냄
+    files[1].description_file = {"id": "d2", "name": "v2.docx", "mimeType": "x", "parents": ["p"]}
+    n = len(FakeChat.msgs)
+    m._run(c, FakeChat(), tz)
+    assert "v2" not in got and len(FakeChat.msgs) == n
+
+    # 다음날: v2 는 업로드, v3 는 여전히 없으므로 다시 알림 후 하루 더 대기
+    for vals in FakeSheet.store.values():
+        if vals[HEADERS.index("status")] == "waiting":
+            vals[HEADERS.index("next_try_date")] = today.isoformat()
+    m._run(c, FakeChat(), tz)
+    st = {v[0]: (v[HEADERS.index("status")], v[HEADERS.index("next_try_date")]) for v in FakeSheet.store.values()}
+    assert st["f2"] == ("success", "") and st["f3"] == ("waiting", tomorrow)
+    assert sum("보류" in t for t in FakeChat.msgs) == 2
+    assert len(FakeSheet.store) == 3
+
+    # 옵션 끄면 설명 없이 바로 업로드
     c = cfg(monkeypatch, REQUIRE_DESCRIPTION_FILE="false")
-    m._run(c, FakeChat(), ZoneInfo("Asia/Seoul"))
-    assert got["v2"] == "" and got["v3"] == ""
-    assert any("설명 파일이 없어" in t for t in FakeChat.msgs)
+    for vals in FakeSheet.store.values():
+        if vals[0] == "f3":
+            vals[HEADERS.index("next_try_date")] = today.isoformat()
+    m._run(c, FakeChat(), tz)
+    assert got["v3"] == ""
