@@ -139,7 +139,8 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 
 | 이름 | 기본값 | 설명 |
 |---|---|---|
-| `YT_PRIVACY_STATUS` | `private` | `private` / `unlisted` / `public` |
+| `YT_PRIVACY_STATUS` | `private` | `private` / `unlisted` / `public` (공개 예약을 쓰면 무시되고 비공개로 올라감) |
+| `YT_PUBLISH_SCHEDULE` | `MON 08:00` | 공개 예약 요일·시각 (`TIMEZONE` 기준). 비공개로 올린 뒤 다가오는 해당 요일·시각에 자동 공개. 끄려면 `none` |
 | `YT_TITLE_TEMPLATE` | `{stem}` | 사용 가능: `{stem}`(확장자 뺀 파일명) `{name}` `{date}` `{datetime}` `{created_date}` |
 | `YT_DESCRIPTION_TEMPLATE` | `{description}` | 설명 형식. `{description}` = 같은 이름 설명 파일 내용. 그 외 제목과 같은 치환자 사용, 줄바꿈은 `\n` |
 | `REQUIRE_DESCRIPTION_FILE` | `true` | 같은 이름의 설명 파일이 없으면 업로드를 보류하고 Chat 으로 알린 뒤 다음날 다시 확인. `false` 면 설명 없이 바로 업로드 |
@@ -180,6 +181,14 @@ py -m uploader.get_refresh_token --client-secret client_secret.json --for drive
 - 공통 문구를 붙이려면 예: `YT_DESCRIPTION_TEMPLATE` = `{description}\n\n구독과 좋아요 부탁드립니다!`
 - `AFTER_UPLOAD=move` 이면 설명 파일도 영상과 함께 완료 폴더로 옮깁니다.
 - 시트 `description_file` 칸에 어떤 파일을 썼는지 기록됩니다.
+
+### 공개 예약 (매주 월요일 오전 8시)
+
+- 영상은 **비공개**로 올라가고, 업로드 시점 기준 **다가오는 월요일 08:00(한국시간)** 에 공개되도록 예약됩니다.
+- 한 주 동안 올라간 영상은 모두 같은 월요일 08:00 에 함께 공개됩니다.
+- 월요일 07:00 이후(공개 1시간 전 이내)에 올라간 영상은 그다음 주 월요일로 예약됩니다.
+- 예약 시각은 시트 `publish_at` 칸과 Chat 알림에 표시됩니다. YouTube Studio 에서 개별로 바꿀 수도 있습니다.
+- ⚠️ **API 감사를 받지 않은 Cloud 프로젝트**로 올린 영상은 YouTube 가 비공개로 잠가 두기 때문에 **예약 공개도 실행되지 않습니다.** 감사 통과 전까지는 Studio 에서 직접 공개 예약을 걸어야 합니다. (아래 "알아둘 제약" 참고)
 
 ### 재생목록 지정
 

@@ -65,6 +65,7 @@ class Config:
 
     # --- 동작 옵션 ---
     privacy_status: str
+    publish_schedule: str | None
     category_id: str
     made_for_kids: bool
     title_template: str
@@ -96,6 +97,7 @@ class Config:
             sheet_tab=_env("SHEET_TAB", "uploads") or "uploads",
             chat_webhook_url=_env("GOOGLE_CHAT_WEBHOOK_URL"),
             privacy_status=(_env("YT_PRIVACY_STATUS", "private") or "private").lower(),
+            publish_schedule=_env("YT_PUBLISH_SCHEDULE", "MON 08:00"),
             category_id=_env("YT_CATEGORY_ID", "22") or "22",
             made_for_kids=_bool("YT_MADE_FOR_KIDS", False),
             title_template=_env("YT_TITLE_TEMPLATE", "{stem}") or "{stem}",

@@ -49,7 +49,8 @@ class YouTube:
         self.svc = build("youtube", "v3", credentials=creds, cache_discovery=False)
 
     def upload(self, path: str, mime_type: str, title: str, description: str, tags: list[str],
-               category_id: str, privacy_status: str, made_for_kids: bool) -> str:
+               category_id: str, privacy_status: str, made_for_kids: bool,
+               publish_at: str | None = None) -> str:
         body = {
             "snippet": {
                 "title": safe_title(title),
@@ -63,6 +64,10 @@ class YouTube:
         }
         if tags:
             body["snippet"]["tags"] = tags
+        if publish_at:
+            # 예약 공개: 비공개로 올리고 publishAt 시각에 YouTube 가 공개로 전환
+            body["status"]["privacyStatus"] = "private"
+            body["status"]["publishAt"] = publish_at
         media = MediaFileUpload(path, mimetype=mime_type or "video/*", chunksize=16 * 1024 * 1024, resumable=True)
         req = self.svc.videos().insert(part="snippet,status", body=body, media_body=media)
 

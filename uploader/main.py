@@ -16,6 +16,7 @@ from .chat import Chat
 from .config import Config
 from .description import clean
 from .drive import Drive, DriveFile
+from .schedule import next_publish_at, parse_schedule, to_rfc3339_utc
 from .google_auth import drive_credentials, youtube_credentials
 from .sheet import Row, Sheet, decide
 from .youtube import QuotaExceeded, YouTube
@@ -133,6 +134,7 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
     if not todo:
         return 0
 
+    sched = parse_schedule(cfg.publish_schedule)
     yt = YouTube(youtube_credentials(cfg))
     uploaded = failed = 0
     for v, row, reason in todo[: cfg.max_uploads_per_run]:
@@ -164,6 +166,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         sheet.save(row)
         log.info("▶ %s (%s, %.1fMB)", v.name, reason, v.size / 1024 / 1024)
 
+        publish_dt = next_publish_at(sched, tz) if sched else None
+        row.set("publish_at", publish_dt.strftime("%Y-%m-%d %H:%M") if publish_dt else "")
         tmpdir = tempfile.mkdtemp(prefix="d2y-")
         path = os.path.join(tmpdir, "video" + os.path.splitext(v.name)[1])
         try:
@@ -171,6 +175,7 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             video_id = yt.upload(
                 path, v.mime_type, title, description, cfg.tags,
                 cfg.category_id, cfg.privacy_status, cfg.made_for_kids,
+                to_rfc3339_utc(publish_dt) if publish_dt else None,
             )
             url = f"https://youtu.be/{video_id}"
             row.set("status", "success")
@@ -201,12 +206,15 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
                     notes += "\n(완료 폴더로 이동함)"
                 except Exception as e:  # noqa: BLE001
                     notes += f"\n⚠️ 완료 폴더 이동 실패: {e}"
+            visibility = (
+                f"비공개 → {publish_dt.strftime('%m/%d')}({'월화수목금토일'[publish_dt.weekday()]}) {publish_dt.strftime('%H:%M')} 공개 예약" if publish_dt else cfg.privacy_status
+            )
             if not v.description_file:
                 notes += "\nℹ️ 같은 이름의 설명 파일이 없어 기본 설명으로 올렸습니다."
             elif not desc_text:
                 notes += f"\n⚠️ 설명 파일을 읽지 못했거나 비어 있습니다: {desc_note}"
             chat.send(
-                f"✅ *YouTube 업로드 완료* ({cfg.privacy_status})\n파일: {v.name}\n제목: {title}\n{url}{notes}",
+                f"✅ *YouTube 업로드 완료* ({visibility})\n파일: {v.name}\n제목: {title}\n{url}{notes}",
                 mention="⚠️" in notes,  # 재생목록·이동·설명 읽기 실패 등 확인이 필요할 때만 태그
             )
         except QuotaExceeded as e:

@@ -54,6 +54,7 @@ jobs:
           # --- variables (옵션, 비우면 기본값) ---
           SHEET_TAB: ${{ vars.SHEET_TAB }}
           YT_PRIVACY_STATUS: ${{ vars.YT_PRIVACY_STATUS }}
+          YT_PUBLISH_SCHEDULE: ${{ vars.YT_PUBLISH_SCHEDULE }}
           YT_CATEGORY_ID: ${{ vars.YT_CATEGORY_ID }}
           YT_MADE_FOR_KIDS: ${{ vars.YT_MADE_FOR_KIDS }}
           YT_TITLE_TEMPLATE: ${{ vars.YT_TITLE_TEMPLATE }}
