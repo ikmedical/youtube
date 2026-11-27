@@ -66,6 +66,7 @@ class Config:
     # --- 동작 옵션 ---
     privacy_status: str
     publish_schedule: str | None
+    video_order: str  # created | name
     category_id: str
     made_for_kids: bool
     title_template: str
@@ -98,6 +99,7 @@ class Config:
             chat_webhook_url=_env("GOOGLE_CHAT_WEBHOOK_URL"),
             privacy_status=(_env("YT_PRIVACY_STATUS", "private") or "private").lower(),
             publish_schedule=_env("YT_PUBLISH_SCHEDULE", "MON 08:00"),
+            video_order=(_env("VIDEO_ORDER", "created") or "created").lower(),
             category_id=_env("YT_CATEGORY_ID", "22") or "22",
             made_for_kids=_bool("YT_MADE_FOR_KIDS", False),
             title_template=_env("YT_TITLE_TEMPLATE", "{stem}") or "{stem}",
@@ -134,6 +136,8 @@ class Config:
             missing.append("DRIVE_SERVICE_ACCOUNT_JSON 또는 DRIVE_REFRESH_TOKEN")
         if self.privacy_status not in ("private", "unlisted", "public"):
             raise SystemExit("[config] YT_PRIVACY_STATUS 는 private / unlisted / public 중 하나여야 합니다.")
+        if self.video_order not in ("created", "name"):
+            raise SystemExit("[config] VIDEO_ORDER 는 created 또는 name 이어야 합니다.")
         if self.after_upload not in ("keep", "move"):
             raise SystemExit("[config] AFTER_UPLOAD 는 keep 또는 move 여야 합니다.")
         if self.after_upload == "move" and not self.done_folder_id:

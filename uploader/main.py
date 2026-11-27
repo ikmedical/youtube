@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
+import unicodedata
 import tempfile
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -16,7 +18,7 @@ from .chat import Chat
 from .config import Config
 from .description import clean
 from .drive import Drive, DriveFile
-from .schedule import next_publish_at, parse_schedule, to_rfc3339_utc
+from .schedule import date_key, next_free_slot, parse_schedule, to_rfc3339_utc
 from .google_auth import drive_credentials, youtube_credentials
 from .sheet import Row, Sheet, decide
 from .youtube import QuotaExceeded, YouTube
@@ -44,6 +46,11 @@ def render(template: str, f: DriveFile, tz: ZoneInfo, description: str = "") -> 
     out = template.replace("\\n", "\n").format_map(values)
     # 설명 파일 내용은 마지막에 넣어 내용 속 { } 가 치환되지 않게 한다
     return out.replace("{description}", description).strip()
+
+
+def natural_key(name: str):
+    """'2강' 이 '10강' 보다 앞에 오도록 숫자를 숫자로 비교."""
+    return [int(t) if t.isdigit() else t.casefold() for t in re.split(r"(\d+)", unicodedata.normalize("NFC", name))]
 
 
 def run_url() -> str:
@@ -82,6 +89,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
 
     exclude = {cfg.done_folder_id} if cfg.done_folder_id else set()
     videos = drive.list_videos(cfg.drive_folder_id, cfg.include_subfolders, exclude)
+    if cfg.video_order == "name":
+        videos.sort(key=lambda v: natural_key(v.name))
     log.info("드라이브 영상 %d개, 시트 기록 %d건", len(videos), len(rows))
 
     today = datetime.now(tz).date()
@@ -136,6 +145,22 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
 
     sched = parse_schedule(cfg.publish_schedule)
     yt = YouTube(youtube_credentials(cfg))
+    # 한 주에 한 개: 이미 예약된 날짜(시트 + 채널에 걸려 있는 예약)는 건너뛴다
+    occupied: set[str] = set()
+    if sched:
+        for r in rows.values():
+            if r.status in ("success", "uploading"):
+                k = date_key(r.get("publish_at"), tz)
+                if k:
+                    occupied.add(k)
+        try:
+            for pa in yt.scheduled_publish_times():
+                k = date_key(pa, tz)
+                if k:
+                    occupied.add(k)
+        except Exception as e:  # noqa: BLE001
+            log.warning("채널의 기존 예약 조회 실패(시트 기록만 사용): %s", e)
+        log.info("이미 예약된 날짜: %s", ", ".join(sorted(occupied)) or "(없음)")
     uploaded = failed = 0
     for v, row, reason in todo[: cfg.max_uploads_per_run]:
         if row is None:
@@ -166,7 +191,7 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
         sheet.save(row)
         log.info("▶ %s (%s, %.1fMB)", v.name, reason, v.size / 1024 / 1024)
 
-        publish_dt = next_publish_at(sched, tz) if sched else None
+        publish_dt = next_free_slot(sched, tz, occupied) if sched else None
         row.set("publish_at", publish_dt.strftime("%Y-%m-%d %H:%M") if publish_dt else "")
         tmpdir = tempfile.mkdtemp(prefix="d2y-")
         path = os.path.join(tmpdir, "video" + os.path.splitext(v.name)[1])
@@ -179,6 +204,8 @@ def _run(cfg: Config, chat: Chat, tz: ZoneInfo) -> int:
             )
             url = f"https://youtu.be/{video_id}"
             row.set("status", "success")
+            if publish_dt:
+                occupied.add(publish_dt.strftime("%Y-%m-%d"))
             row.set("youtube_video_id", video_id)
             row.set("youtube_url", url)
             row.set("finished_at", now_str(tz))

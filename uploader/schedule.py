@@ -37,3 +37,30 @@ def next_publish_at(sched: tuple[int, int, int], tz: ZoneInfo, now: datetime | N
 
 def to_rfc3339_utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def next_free_slot(sched: tuple[int, int, int], tz: ZoneInfo, occupied: set[str],
+                   now: datetime | None = None, min_lead: timedelta = timedelta(hours=1)) -> datetime:
+    """다가오는 지정 요일부터 한 주씩 넘기며, 아직 예약된 영상이 없는 첫 날짜를 고른다.
+
+    occupied: 이미 예약된 날짜(YYYY-MM-DD, tz 기준) 집합
+    """
+    cand = next_publish_at(sched, tz, now, min_lead)
+    for _ in range(520):  # 최대 10년
+        if cand.strftime("%Y-%m-%d") not in occupied:
+            return cand
+        cand += timedelta(days=7)
+    raise RuntimeError("비어 있는 공개 예약 날짜를 찾지 못했습니다.")
+
+
+def date_key(value: str, tz: ZoneInfo) -> str | None:
+    """시트의 'YYYY-MM-DD HH:MM'(tz 기준) 또는 RFC3339(UTC) 문자열 → 'YYYY-MM-DD'(tz 기준)."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        if "T" in value:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(tz).strftime("%Y-%m-%d")
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d")
+    except ValueError:
+        return None

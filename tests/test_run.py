@@ -73,6 +73,10 @@ class FakeYT:
         return "YT_" + title
 
     added = []
+    scheduled = []  # 채널에 이미 걸려 있는 예약(RFC3339)
+
+    def scheduled_publish_times(self):
+        return list(FakeYT.scheduled)
 
     def add_to_playlist(self, video_id, playlist_id):
         FakeYT.added.append((video_id, playlist_id))
@@ -214,3 +218,32 @@ def test_mentions_only_on_failure(monkeypatch):
     monkeypatch.setattr(FakeDrive, "files", [vid(1), vid(2)])
     m._run(cfg(monkeypatch), chat, ZoneInfo("Asia/Seoul"))
     assert [mention for _, mention in sent] == [False, True]
+
+
+def test_one_video_per_week(monkeypatch):
+    setup(monkeypatch)
+    FakeYT.behaviour = {}
+    tz = ZoneInfo("Asia/Seoul")
+    slot1 = m.next_free_slot(m.parse_schedule("MON 08:00"), tz, set())
+    # 채널에 첫 번째 월요일이 이미 수동 예약되어 있음
+    FakeYT.scheduled = [m.to_rfc3339_utc(slot1)]
+    publish = {}
+    orig = FakeYT.upload
+
+    def spy(self, path, mime, title, description, tags, cat, privacy, kids, publish_at=None):
+        publish[title] = publish_at
+        return orig(self, path, mime, title, description)
+
+    monkeypatch.setattr(FakeYT, "upload", spy)
+    monkeypatch.setattr(FakeDrive, "files", [vid(1), vid(2)])
+    m._run(cfg(monkeypatch), FakeChat(), tz)
+    w2 = slot1 + m.timedelta(days=7)
+    w3 = slot1 + m.timedelta(days=14)
+    assert publish == {"v1": m.to_rfc3339_utc(w2), "v2": m.to_rfc3339_utc(w3)}
+
+    # 다음 실행: 시트에 기록된 예약도 반영해서 그다음 주로
+    FakeYT.scheduled = []
+    monkeypatch.setattr(FakeDrive, "files", [vid(1), vid(2), vid(3)])
+    m._run(cfg(monkeypatch), FakeChat(), tz)
+    assert publish["v3"] == m.to_rfc3339_utc(slot1)  # 비어 있는 첫 주를 채움
+    FakeYT.scheduled = []

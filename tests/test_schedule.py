@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from uploader.schedule import next_publish_at, parse_schedule, to_rfc3339_utc
+from uploader.schedule import date_key, next_free_slot, next_publish_at, parse_schedule, to_rfc3339_utc
 
 KST = ZoneInfo("Asia/Seoul")
 S = parse_schedule("MON 08:00")
@@ -33,3 +33,21 @@ def test_next_monday():
 
 def test_rfc3339():
     assert to_rfc3339_utc(at("2026-11-30T08:00")) == "2026-11-29T23:00:00.000Z"
+
+
+def test_next_free_slot():
+    now = at("2026-11-27T14:00")
+    assert next_free_slot(S, KST, set(), now) == at("2026-11-30T08:00")
+    assert next_free_slot(S, KST, {"2026-11-30", "2026-12-07"}, now) == at("2026-12-14T08:00")
+    assert next_free_slot(S, KST, {"2026-12-07"}, now) == at("2026-11-30T08:00")
+
+
+def test_date_key():
+    assert date_key("2026-11-30 08:00", KST) == "2026-11-30"
+    assert date_key("2026-11-29T23:00:00Z", KST) == "2026-11-30"
+    assert date_key("", KST) is None and date_key("garbage", KST) is None
+
+
+def test_natural_key():
+    from uploader.main import natural_key
+    assert sorted(["10강.mp4", "2강.mp4", "1강.mp4"], key=natural_key) == ["1강.mp4", "2강.mp4", "10강.mp4"]

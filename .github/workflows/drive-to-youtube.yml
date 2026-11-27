@@ -55,6 +55,7 @@ jobs:
           SHEET_TAB: ${{ vars.SHEET_TAB }}
           YT_PRIVACY_STATUS: ${{ vars.YT_PRIVACY_STATUS }}
           YT_PUBLISH_SCHEDULE: ${{ vars.YT_PUBLISH_SCHEDULE }}
+          VIDEO_ORDER: ${{ vars.VIDEO_ORDER }}
           YT_CATEGORY_ID: ${{ vars.YT_CATEGORY_ID }}
           YT_MADE_FOR_KIDS: ${{ vars.YT_MADE_FOR_KIDS }}
           YT_TITLE_TEMPLATE: ${{ vars.YT_TITLE_TEMPLATE }}

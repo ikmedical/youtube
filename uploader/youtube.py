@@ -123,3 +123,29 @@ class YouTube:
                     time.sleep(5 * (attempt + 1))
                     continue
                 raise
+
+    def scheduled_publish_times(self, max_items: int = 300) -> list[str]:
+        """채널에 이미 공개 예약(publishAt)이 걸린 영상들의 예약 시각(RFC3339) 목록."""
+        ch = self.svc.channels().list(part="contentDetails", mine=True).execute()
+        items = ch.get("items", [])
+        if not items:
+            return []
+        uploads = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        ids: list[str] = []
+        token = None
+        while len(ids) < max_items:
+            resp = self.svc.playlistItems().list(
+                part="contentDetails", playlistId=uploads, maxResults=50, pageToken=token
+            ).execute()
+            ids += [it["contentDetails"]["videoId"] for it in resp.get("items", [])]
+            token = resp.get("nextPageToken")
+            if not token:
+                break
+        out: list[str] = []
+        for i in range(0, len(ids), 50):
+            resp = self.svc.videos().list(part="status", id=",".join(ids[i:i + 50])).execute()
+            for v in resp.get("items", []):
+                pa = v.get("status", {}).get("publishAt")
+                if pa:
+                    out.append(pa)
+        return out
